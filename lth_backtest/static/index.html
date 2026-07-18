@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>BackTest version2</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark">V2</div>
+      <div class="brand-copy">
+        <h1>BackTest <span>version2</span></h1>
+        <p>무한매수법 V4 · 조정 OHLC 정밀 시뮬레이터</p>
+      </div>
+      <div class="top-actions">
+        <span class="status-dot" id="serverStatus">연결 확인 중</span>
+        <button class="button ghost" id="downloadJson" disabled>JSON</button>
+        <button class="button ghost" id="downloadCsv" disabled>CSV</button>
+        <button class="button ghost" id="downloadReport" disabled>HTML 리포트</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-panel">
+        <form id="backtestForm">
+          <div class="control-heading">
+            <div><span class="eyebrow">SIMULATION</span><h2>백테스트 설정</h2></div>
+            <button type="button" class="icon-button" id="resetForm" aria-label="기본값 복원">↺</button>
+          </div>
+
+          <section class="form-section">
+            <h3>전략</h3>
+            <div class="segmented" role="radiogroup" aria-label="종목">
+              <label><input type="radio" name="symbol" value="TQQQ" checked><span>TQQQ</span></label>
+              <label><input type="radio" name="symbol" value="SOXL"><span>SOXL</span></label>
+            </div>
+            <div class="field-grid two">
+              <label class="field"><span>분할 수</span><select name="split_count"><option value="40">40분할</option><option value="20">20분할</option><option value="30">30분할 · 실험</option></select></label>
+              <label class="field"><span>운용 방식</span><select name="compounding_type"><option value="compound">복리</option><option value="simple">단리</option></select></label>
+            </div>
+            <label class="field"><span>시작 원금 ($)</span><input name="principal" type="number" min="1" step="0.01" value="20000" required></label>
+            <label class="field"><span>최종 매도 기준 (%) <small>비우면 TQQQ 15 / SOXL 20</small></span><input name="sell_percent" type="number" min="0.01" step="0.01" placeholder="종목 기본값"></label>
+          </section>
+
+          <section class="form-section">
+            <h3>데이터</h3>
+            <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="BackTest/data/TQQQ.csv" required><datalist id="csvOptions"></datalist></label>
+            <div class="field-grid two">
+              <label class="field"><span>시작일</span><input name="start_date" type="date" value="2020-01-01" required></label>
+              <label class="field"><span>종료일</span><input name="end_date" type="date" required></label>
+            </div>
+            <button type="button" class="button secondary full" id="refreshPrices">선택 종목 최신 데이터 받기</button>
+            <p class="field-help" id="datasetInfo">OHLC 데이터의 고가로 장중 지정가 체결을 확인합니다.</p>
+          </section>
+
+          <details class="form-section advanced">
+            <summary>체결·비용 고급 설정</summary>
+            <div class="advanced-body">
+              <label class="field"><span>최종 지정가 체결</span><select name="fill_model"><option value="intraday_high">장중 고가 기준 · 권장</option><option value="close_only">종가 기준 · 비교용</option></select></label>
+              <label class="field"><span>새 라운드 첫 매수</span><select name="initial_entry"><option value="web_loc">전일 종가 + 버퍼 LOC · 권장</option><option value="moc">당일 종가 MOC · 기존 호환</option></select></label>
+              <div class="field-grid two">
+                <label class="field"><span>첫 매수 버퍼 (%)</span><input name="first_buy_buffer_percent" type="number" min="0" step="0.1" value="12"></label>
+                <label class="field"><span>무위험 수익률 (%)</span><input name="annual_risk_free_rate" type="number" step="0.01" value="0"></label>
+              </div>
+              <div class="field-grid three">
+                <label class="field"><span>슬리피지 (bp)</span><input name="slippage_bps" type="number" min="0" step="0.1" value="0"></label>
+                <label class="field"><span>건당 수수료 ($)</span><input name="commission" type="number" min="0" step="0.0001" value="0"></label>
+                <label class="field"><span>매도 비용 (bp)</span><input name="sell_fee_bps" type="number" min="0" step="0.01" value="0"></label>
+              </div>
+              <label class="check-row"><input type="checkbox" name="compare_close_only" checked><span>장중 고가와 종가 전용 결과 자동 비교</span></label>
+            </div>
+          </details>
+
+          <button class="button primary run-button" type="submit"><span>백테스트 실행</span><kbd>⌘ ↵</kbd></button>
+        </form>
+      </aside>
+
+      <section class="results-panel">
+        <nav class="tabs" aria-label="결과 화면">
+          <button class="tab active" data-tab="overview">대시보드</button>
+          <button class="tab" data-tab="executions">체결 내역 <span id="executionCount"></span></button>
+          <button class="tab" data-tab="rounds">라운드 <span id="roundCount"></span></button>
+          <button class="tab" data-tab="periods">기간별 수익</button>
+          <button class="tab" data-tab="random">랜덤 비교</button>
+        </nav>
+
+        <div class="loading hidden" id="loading"><div class="spinner"></div><strong>정밀 계산 중입니다</strong><span>일별 주문과 체결을 순서대로 검증하고 있습니다.</span></div>
+        <div class="toast hidden" id="toast" role="status"></div>
+
+        <section class="tab-page active" id="tab-overview">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-visual"><span></span><span></span><span></span><span></span><span></span></div>
+            <h2>조건을 정하고 백테스트를 실행하세요</h2>
+            <p>장중 고가 최종매도, LOC 종가 체결, 리버스모드, 단리·복리와 거래비용을 한 번에 분석합니다.</p>
+            <div class="assumption-strip"><span>가격</span><strong>조정 OHLC</strong><i></i><span>주문가</span><strong>소수 2자리</strong><i></i><span>T값</span><strong>소수 10자리</strong></div>
+          </div>
+
+          <div class="results-content hidden" id="resultsContent">
+            <div class="result-head">
+              <div><span class="eyebrow" id="resultPeriod">RESULT</span><h2 id="resultTitle">백테스트 결과</h2></div>
+              <div class="result-badges"><span id="fillBadge"></span><span id="modeBadge"></span></div>
+            </div>
+            <div class="summary-grid" id="summaryCards"></div>
+            <div class="comparison-callout hidden" id="fillComparison"></div>
+            <div class="dashboard-grid">
+              <article class="panel chart-panel wide">
+                <div class="panel-head"><div><h3>자산 곡선</h3><p>전략·종목 거치식·QLD 거치식의 일별 종가 평가액</p></div><div class="legend"><span class="strategy">전략</span><span class="benchmark">종목</span><span class="qld">QLD</span></div></div>
+                <div class="canvas-wrap"><canvas id="equityChart"></canvas><div class="chart-tooltip hidden" id="equityTooltip"></div></div>
+              </article>
+              <article class="panel chart-panel">
+                <div class="panel-head"><div><h3>낙폭</h3><p>종가 기준 최고점 대비</p></div><strong id="mddValue">-</strong></div>
+                <div class="canvas-wrap short"><canvas id="drawdownChart"></canvas></div>
+              </article>
+              <article class="panel">
+                <div class="panel-head"><div><h3>위험·효율 지표</h3><p>일별 종가 자산 기준</p></div></div>
+                <dl class="metric-list" id="riskMetrics"></dl>
+              </article>
+              <article class="panel">
+                <div class="panel-head"><div><h3>체결 진단</h3><p>장중 고가와 주문 규칙 검증</p></div></div>
+                <dl class="metric-list" id="executionDiagnostics"></dl>
+              </article>
+              <article class="panel warning-panel" id="warningPanel">
+                <div class="panel-head"><div><h3>가정과 주의사항</h3><p>결과 해석 전에 확인하세요</p></div></div>
+                <ul id="warningList"></ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-page" id="tab-executions">
+          <div class="table-toolbar"><div><h2>체결 내역</h2><p>모든 현금·수량·T값 변화를 추적합니다.</p></div><div class="table-filters"><input id="executionSearch" type="search" placeholder="날짜·라벨 검색"><select id="executionSide"><option value="">전체 매매</option><option value="buy">매수</option><option value="sell">매도</option></select></div></div>
+          <div class="data-table"><table><thead><tr><th>#</th><th>날짜</th><th>모드</th><th>매매</th><th>주문</th><th>구분</th><th>주문가</th><th>체결가</th><th>수량</th><th>거래금액</th><th>비용</th><th>T 전</th><th>T 후</th></tr></thead><tbody id="executionRows"></tbody></table></div>
+          <button class="button secondary load-more hidden" id="executionMore">100건 더 보기</button>
+        </section>
+
+        <section class="tab-page" id="tab-rounds">
+          <div class="table-toolbar"><div><h2>완료 라운드</h2><p>단리는 운용원금과 실제 라운드 시작자산을 구분합니다.</p></div></div>
+          <div class="data-table"><table><thead><tr><th>회차</th><th>시작</th><th>종료</th><th>거래일</th><th>운용원금</th><th>시작자산</th><th>종료자산</th><th>손익</th><th>수익률</th><th>체결</th><th>비용</th></tr></thead><tbody id="roundRows"></tbody></table></div>
+        </section>
+
+        <section class="tab-page" id="tab-periods">
+          <div class="period-grid"><article class="panel"><div class="panel-head"><h2>연도별 수익률</h2></div><div class="data-table compact"><table><thead><tr><th>연도</th><th>종료자산</th><th>수익률</th></tr></thead><tbody id="yearRows"></tbody></table></div></article><article class="panel"><div class="panel-head"><h2>월별 수익률</h2></div><div class="data-table compact tall"><table><thead><tr><th>월</th><th>종료자산</th><th>수익률</th></tr></thead><tbody id="monthRows"></tbody></table></div></article></div>
+        </section>
+
+        <section class="tab-page" id="tab-random">
+          <div class="random-layout">
+            <form class="panel random-form" id="randomForm">
+              <div class="panel-head"><div><h2>랜덤 기간 견고성 비교</h2><p>동일 기간의 전략, 종목 거치식, QLD를 비교합니다.</p></div></div>
+              <div class="choice-row"><label><input type="checkbox" name="symbols" value="TQQQ" checked><span>TQQQ</span></label><label><input type="checkbox" name="symbols" value="SOXL" checked><span>SOXL</span></label></div>
+              <div class="choice-row"><label><input type="checkbox" name="splits" value="20" checked><span>20분할</span></label><label><input type="checkbox" name="splits" value="40" checked><span>40분할</span></label><label><input type="checkbox" name="splits" value="30"><span>30분할 · 실험</span></label></div>
+              <div class="field-grid three"><label class="field"><span>샘플 수</span><input name="count" type="number" min="1" max="2000" value="100"></label><label class="field"><span>최소 거래일</span><input name="min_days" type="number" min="2" value="60"></label><label class="field"><span>최대 거래일</span><input name="max_days" type="number" min="2" placeholder="전체"></label></div>
+              <label class="field"><span>재현 시드</span><input name="seed" type="number" placeholder="비우면 무작위"></label>
+              <button class="button primary full" type="submit">랜덤 비교 실행</button>
+            </form>
+            <div class="random-results" id="randomResults"><div class="empty-mini">랜덤 비교를 실행하면 조합별 평균·최악 수익률과 승률을 보여줍니다.</div></div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

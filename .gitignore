@@ -1,0 +1,11 @@
+data/*.csv
+results/*
+!data/.gitkeep
+!results/.gitkeep
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+*.egg-info/
+.DS_Store
