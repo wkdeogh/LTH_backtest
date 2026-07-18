@@ -69,12 +69,16 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn("function drawRoundStartScatterChart()", javascript)
         self.assertIn("item.mdd_peak_date", javascript)
         self.assertIn(".round-start-visuals", stylesheet)
+        self.assertIn("grid-template-columns: minmax(0,1fr)", stylesheet)
+        self.assertIn(".round-chart-wrap { position: relative; width: 100%; height: 360px; }", stylesheet)
 
-    def test_equity_tooltip_shows_return_from_initial_principal(self) -> None:
+    def test_equity_tooltip_shows_each_curve_return_from_initial_principal(self) -> None:
         javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
 
-        self.assertIn("Number(point.equity) / initialEquity - 1", javascript)
-        self.assertIn("<br>수익률 ${percent(profitRate, 2, true)}", javascript)
+        self.assertIn("Number(value) / initialEquity - 1", javascript)
+        self.assertIn("전략 ${money(point.equity)} (${percent(returnRate(point.equity), 2, true)})", javascript)
+        self.assertIn("종목 ${money(point.benchmark_equity)} (${percent(returnRate(point.benchmark_equity), 2, true)})", javascript)
+        self.assertIn("QLD ${money(point.qld_benchmark_equity)} (${percent(returnRate(point.qld_benchmark_equity), 2, true)})", javascript)
         self.assertNotIn("<br>낙폭 ${percent(point.drawdown)}", javascript)
 
 
