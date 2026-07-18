@@ -363,9 +363,11 @@ class Simulator:
         benchmark_equity = round_money(self.config.principal * day.close / start_close)
         point = {
             "date": day.date,
+            "open": day.open,
             "close": day.close,
             "high": day.high,
             "low": day.low,
+            "volume": day.volume,
             "equity": equity,
             "benchmark_equity": benchmark_equity,
             "cash_balance": self.state.cash_balance,

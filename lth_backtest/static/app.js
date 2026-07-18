@@ -8,11 +8,15 @@ const app = {
   randomResult: null,
   roundStartResult: null,
   roundStartLimit: 200,
+  candleEnd: 0,
+  candleHoverIndex: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const money = value => value == null ? "-" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
+const price = value => value == null ? "-" : `$${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+const volumeNumber = value => value == null ? "-" : Number(value).toLocaleString("ko-KR");
 const number = (value, digits = 2) => value == null ? "-" : Number(value).toLocaleString("ko-KR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const percent = (value, digits = 2, sign = false) => value == null ? "-" : `${sign && Number(value) > 0 ? "+" : ""}${number(value, digits)}%`;
 const cls = value => Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : "";
@@ -101,6 +105,7 @@ function activateTab(name) {
   $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === name));
   $$(".tab-page").forEach(page => page.classList.toggle("active", page.id === `tab-${name}`));
   if (name === "overview" && app.result) requestAnimationFrame(renderCharts);
+  if (name === "candles" && app.result) requestAnimationFrame(drawCandlestick);
 }
 
 function summaryCard(label, value, detail = "", valueClass = "") {
@@ -308,14 +313,108 @@ function drawDrawdown() {
   ctx.fillStyle = "#7b8580"; ctx.font = "10px sans-serif"; ctx.textAlign = "left"; ctx.fillText("0%", pad, 10); ctx.fillText(`${number(minimum, 1)}%`, pad, height - 5);
 }
 
-function renderCharts() { drawEquity(); drawDrawdown(); }
+function candleWindow() {
+  const total = app.chartPoints.length;
+  const requested = Number($("#candleRange").value);
+  const size = requested === 0 ? total : Math.min(requested, total);
+  if (!app.candleEnd || app.candleEnd > total) app.candleEnd = total;
+  app.candleEnd = Math.max(Math.min(app.candleEnd, total), size);
+  const end = requested === 0 ? total : app.candleEnd;
+  const start = Math.max(0, end - size);
+  return { start, end, size, total, bars: app.chartPoints.slice(start, end), showAll: requested === 0 };
+}
+
+function drawCandlestick() {
+  const canvas = $("#candlestickChart");
+  if (!canvas || !app.chartPoints.length || !canvas.offsetParent) return;
+  const windowData = candleWindow();
+  const bars = windowData.bars;
+  if (!bars.length) return;
+  const { context: ctx, width, height } = fitCanvas(canvas);
+  const padding = { left: 14, right: 74, top: 14, bottom: 28 };
+  const volumeHeight = Math.min(86, height * .2);
+  const sectionGap = 16;
+  const priceBottom = height - padding.bottom - volumeHeight - sectionGap;
+  const plotWidth = Math.max(width - padding.left - padding.right, 1);
+  const priceHeight = Math.max(priceBottom - padding.top, 1);
+  let low = Math.min(...bars.map(item => Number(item.low)));
+  let high = Math.max(...bars.map(item => Number(item.high)));
+  const rawRange = Math.max(high - low, Math.abs(high) * .005, .01);
+  low -= rawRange * .04;
+  high += rawRange * .04;
+  const priceY = value => padding.top + (high - Number(value)) / (high - low) * priceHeight;
+  const slot = plotWidth / bars.length;
+  const candleX = index => padding.left + slot * (index + .5);
+  const bodyWidth = Math.max(1, Math.min(slot * .64, 12));
+  const volumeTop = priceBottom + sectionGap;
+  const volumeBottom = height - padding.bottom;
+  const maxVolume = Math.max(...bars.map(item => Number(item.volume || 0)), 1);
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.textBaseline = "middle";
+  for (let index = 0; index < 5; index++) {
+    const ratio = index / 4;
+    const y = padding.top + priceHeight * ratio;
+    const value = high - (high - low) * ratio;
+    ctx.strokeStyle = "#e5ebe7"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(width - padding.right, y); ctx.stroke();
+    ctx.fillStyle = "#77827c"; ctx.textAlign = "left"; ctx.fillText(price(value), width - padding.right + 7, y);
+  }
+
+  ctx.strokeStyle = "#dce4df"; ctx.beginPath(); ctx.moveTo(padding.left, priceBottom + sectionGap / 2); ctx.lineTo(width - padding.right, priceBottom + sectionGap / 2); ctx.stroke();
+  ctx.fillStyle = "#87918c"; ctx.textAlign = "left"; ctx.fillText("거래량", padding.left, volumeTop + 5);
+
+  bars.forEach((item, index) => {
+    const x = candleX(index);
+    const isUp = Number(item.close) >= Number(item.open);
+    const color = isUp ? "#08775b" : "#c43e45";
+    const volumeValue = Number(item.volume || 0);
+    const volumeBarHeight = volumeValue / maxVolume * Math.max(volumeBottom - volumeTop - 6, 1);
+    ctx.fillStyle = isUp ? "rgba(8,119,91,.22)" : "rgba(196,62,69,.20)";
+    ctx.fillRect(x - bodyWidth / 2, volumeBottom - volumeBarHeight, bodyWidth, volumeBarHeight);
+
+    ctx.strokeStyle = color; ctx.lineWidth = slot < 2 ? .7 : 1; ctx.beginPath(); ctx.moveTo(x, priceY(item.high)); ctx.lineTo(x, priceY(item.low)); ctx.stroke();
+    const openY = priceY(item.open), closeY = priceY(item.close);
+    const bodyTop = Math.min(openY, closeY), bodyHeight = Math.max(Math.abs(closeY - openY), 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
+  });
+
+  const tickCount = Math.min(5, bars.length);
+  for (let index = 0; index < tickCount; index++) {
+    const localIndex = tickCount === 1 ? 0 : Math.round((bars.length - 1) * index / (tickCount - 1));
+    const x = candleX(localIndex);
+    ctx.fillStyle = "#77827c"; ctx.textBaseline = "bottom";
+    ctx.textAlign = index === 0 ? "left" : index === tickCount - 1 ? "right" : "center";
+    ctx.fillText(bars[localIndex].date, x, height - 3);
+  }
+
+  if (app.candleHoverIndex != null && app.candleHoverIndex >= windowData.start && app.candleHoverIndex < windowData.end) {
+    const localIndex = app.candleHoverIndex - windowData.start;
+    const x = candleX(localIndex);
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = "rgba(20,35,28,.38)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, padding.top); ctx.lineTo(x, volumeBottom); ctx.stroke(); ctx.restore();
+  }
+
+  const first = bars[0], last = bars.at(-1);
+  $("#candleWindowInfo").textContent = `${first.date} — ${last.date} · ${bars.length.toLocaleString()}거래일`;
+  $("#candlePrev").disabled = windowData.showAll || windowData.start === 0;
+  $("#candleNext").disabled = windowData.showAll || windowData.end === windowData.total;
+  canvas._candles = { ...windowData, slot, padding, plotWidth, width, height };
+}
+
+function renderCharts() { drawEquity(); drawDrawdown(); drawCandlestick(); }
 
 function renderAll(result) {
   app.result = result;
   app.executionLimit = 100;
+  app.candleEnd = result.equity_curve.length;
+  app.candleHoverIndex = null;
   $("#executionCount").textContent = result.executions.length.toLocaleString();
   $("#roundCount").textContent = result.rounds.length.toLocaleString();
   ["#downloadJson", "#downloadCsv", "#downloadReport"].forEach(selector => $(selector).disabled = false);
+  $("#candleEmpty").classList.add("hidden");
+  $("#candleContent").classList.remove("hidden");
+  $("#candleTitle").textContent = `${result.config.symbol} 캔들 차트`;
   renderOverview(result); renderExecutions(); renderRounds(); renderPeriods(); activateTab("overview");
 }
 
@@ -395,6 +494,44 @@ function renderRandom(result) {
   $("#randomResults").innerHTML = `<div class="random-summary-grid">${result.summary.map(item => `<article class="random-card"><h3>${item.symbol} · ${item.split_count}분할</h3><span class="big ${cls(item.avg_strategy_profit_rate)}">${percent(item.avg_strategy_profit_rate, 2, true)}</span><dl><div><dt>거치식 대비</dt><dd class="${cls(item.avg_excess_vs_hold)}">${percent(item.avg_excess_vs_hold, 2, true)}p</dd></div><div><dt>QLD 대비</dt><dd class="${cls(item.avg_excess_vs_qld)}">${percent(item.avg_excess_vs_qld, 2, true)}p</dd></div><div><dt>전략 승률</dt><dd>${percent(item.strategy_win_rate, 1)}</dd></div><div><dt>최악 / 최고</dt><dd>${percent(item.worst_return, 1)} / ${percent(item.best_return, 1, true)}</dd></div><div><dt>최악 MDD</dt><dd class="negative">${percent(item.worst_close_mdd, 1)}</dd></div><div><dt>고가 전용 체결</dt><dd>${item.intraday_high_only_fills.toLocaleString()}건</dd></div></dl></article>`).join("")}</div>`;
 }
 
+function moveCandleWindow(direction) {
+  if (!app.chartPoints.length) return;
+  const view = candleWindow();
+  if (view.showAll) return;
+  app.candleEnd = direction < 0
+    ? Math.max(view.size, view.start)
+    : Math.min(view.total, view.end + view.size);
+  app.candleHoverIndex = null;
+  $("#candleTooltip").classList.add("hidden");
+  drawCandlestick();
+}
+
+function showCandleTooltip(event) {
+  const canvas = event.currentTarget;
+  const info = canvas._candles;
+  if (!info || !info.bars.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const localX = event.clientX - rect.left;
+  if (localX < info.padding.left || localX > info.width - info.padding.right) {
+    $("#candleTooltip").classList.add("hidden");
+    return;
+  }
+  const localIndex = Math.max(0, Math.min(info.bars.length - 1, Math.floor((localX - info.padding.left) / info.slot)));
+  const globalIndex = info.start + localIndex;
+  const point = app.chartPoints[globalIndex];
+  const previous = app.chartPoints[globalIndex - 1];
+  const change = previous && Number(previous.close) !== 0 ? (Number(point.close) / Number(previous.close) - 1) * 100 : null;
+  if (app.candleHoverIndex !== globalIndex) {
+    app.candleHoverIndex = globalIndex;
+    drawCandlestick();
+  }
+  const tip = $("#candleTooltip");
+  tip.innerHTML = `<strong>${point.date}</strong><div class="tooltip-grid"><span>시가</span><span>${price(point.open)}</span><span>고가</span><span>${price(point.high)}</span><span>저가</span><span>${price(point.low)}</span><span>종가</span><span>${price(point.close)}</span><span>전일 대비</span><span class="${cls(change)}">${percent(change, 3, true)}</span><span>거래량</span><span>${volumeNumber(point.volume)}</span></div>`;
+  tip.style.left = `${Math.max(6, Math.min(localX + 14, rect.width - 210))}px`;
+  tip.style.top = `${Math.max(6, Math.min(event.clientY - rect.top - 58, rect.height - 190))}px`;
+  tip.classList.remove("hidden");
+}
+
 async function init() {
   $("#backtestForm").elements.end_date.value = new Date().toISOString().slice(0, 10);
   try {
@@ -419,6 +556,9 @@ $("#roundStartStatus").addEventListener("change", () => { app.roundStartLimit = 
 $("#roundStartReverse").addEventListener("change", () => { app.roundStartLimit = 200; renderRoundStartRows(); });
 $("#roundStartSort").addEventListener("change", () => { app.roundStartLimit = 200; renderRoundStartRows(); });
 $("#roundStartMore").addEventListener("click", () => { app.roundStartLimit += 200; renderRoundStartRows(); });
+$("#candleRange").addEventListener("change", () => { app.candleEnd = app.chartPoints.length; app.candleHoverIndex = null; $("#candleTooltip").classList.add("hidden"); drawCandlestick(); });
+$("#candlePrev").addEventListener("click", () => moveCandleWindow(-1));
+$("#candleNext").addEventListener("click", () => moveCandleWindow(1));
 $("#downloadJson").addEventListener("click", () => app.result && downloadBlob(JSON.stringify(app.result, null, 2), "application/json", `${app.result.config.symbol}-backtest-v2.json`));
 $("#downloadCsv").addEventListener("click", () => app.result && downloadBlob(csvText(app.result.executions), "text/csv;charset=utf-8", `${app.result.config.symbol}-executions.csv`));
 $("#downloadReport").addEventListener("click", downloadReport);
@@ -433,5 +573,7 @@ $("#equityChart").addEventListener("mousemove", event => {
   const tip = $("#equityTooltip"); tip.innerHTML = `<strong>${point.date}</strong><br>전략 ${money(point.equity)}<br>종목 ${money(point.benchmark_equity)}${point.qld_benchmark_equity == null ? "" : `<br>QLD ${money(point.qld_benchmark_equity)}`}<br>낙폭 ${percent(point.drawdown)}`; tip.style.left = `${Math.min(localX + 12, rect.width - 160)}px`; tip.style.top = `${Math.max(event.clientY - rect.top - 32, 6)}px`; tip.classList.remove("hidden");
 });
 $("#equityChart").addEventListener("mouseleave", () => $("#equityTooltip").classList.add("hidden"));
+$("#candlestickChart").addEventListener("pointermove", showCandleTooltip);
+$("#candlestickChart").addEventListener("pointerleave", () => { app.candleHoverIndex = null; $("#candleTooltip").classList.add("hidden"); drawCandlestick(); });
 
 init();

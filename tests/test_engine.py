@@ -36,6 +36,20 @@ class FormulaTests(unittest.TestCase):
 
 
 class FillModelTests(unittest.TestCase):
+    def test_equity_curve_preserves_ohlcv_for_candlestick_chart(self) -> None:
+        prices = [
+            PriceBar("2024-01-02", D("98.5"), D("105.25"), D("97.75"), D("102.125"), D("102.125"), 1_234_567),
+            bar("2024-01-03", open="102", high="106", low="101", close="104"),
+        ]
+
+        point = run_backtest(BacktestConfig("TQQQ", 40, D("20000")), prices).equity_curve[0]
+
+        self.assertEqual(point["open"], D("98.5"))
+        self.assertEqual(point["high"], D("105.25"))
+        self.assertEqual(point["low"], D("97.75"))
+        self.assertEqual(point["close"], D("102.125"))
+        self.assertEqual(point["volume"], 1_234_567)
+
     def test_intraday_high_fills_final_limit_when_close_does_not(self) -> None:
         prices = [
             bar("2024-01-02"),
