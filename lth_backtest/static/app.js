@@ -874,7 +874,9 @@ $("#equityChart").addEventListener("mousemove", event => {
   if (!app.chartPoints.length) return;
   const canvas = event.currentTarget, info = canvas._chart, rect = canvas.getBoundingClientRect(); if (!info) return;
   const localX = event.clientX - rect.left; const ratio = (localX - info.padding.left) / Math.max(info.width - info.padding.left - info.padding.right, 1); const index = Math.max(0, Math.min(app.chartPoints.length - 1, Math.round(ratio * (app.chartPoints.length - 1)))); const point = app.chartPoints[index];
-  const tip = $("#equityTooltip"); tip.innerHTML = `<strong>${point.date}</strong><br>전략 ${money(point.equity)}<br>종목 ${money(point.benchmark_equity)}${point.qld_benchmark_equity == null ? "" : `<br>QLD ${money(point.qld_benchmark_equity)}`}<br>낙폭 ${percent(point.drawdown)}`; tip.style.left = `${Math.min(localX + 12, rect.width - 160)}px`; tip.style.top = `${Math.max(event.clientY - rect.top - 32, 6)}px`; tip.classList.remove("hidden");
+  const initialEquity = Number(app.result?.config?.principal || 0);
+  const profitRate = initialEquity > 0 ? (Number(point.equity) / initialEquity - 1) * 100 : null;
+  const tip = $("#equityTooltip"); tip.innerHTML = `<strong>${point.date}</strong><br>전략 ${money(point.equity)}<br>종목 ${money(point.benchmark_equity)}${point.qld_benchmark_equity == null ? "" : `<br>QLD ${money(point.qld_benchmark_equity)}`}<br>수익률 ${percent(profitRate, 2, true)}`; tip.style.left = `${Math.min(localX + 12, rect.width - 160)}px`; tip.style.top = `${Math.max(event.clientY - rect.top - 32, 6)}px`; tip.classList.remove("hidden");
 });
 $("#equityChart").addEventListener("mouseleave", () => $("#equityTooltip").classList.add("hidden"));
 $("#candlestickChart").addEventListener("pointermove", showCandleTooltip);

@@ -70,6 +70,13 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn("item.mdd_peak_date", javascript)
         self.assertIn(".round-start-visuals", stylesheet)
 
+    def test_equity_tooltip_shows_return_from_initial_principal(self) -> None:
+        javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("Number(point.equity) / initialEquity - 1", javascript)
+        self.assertIn("<br>수익률 ${percent(profitRate, 2, true)}", javascript)
+        self.assertNotIn("<br>낙폭 ${percent(point.drawdown)}", javascript)
+
 
 if __name__ == "__main__":
     unittest.main()
