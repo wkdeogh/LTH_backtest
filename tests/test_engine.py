@@ -110,6 +110,7 @@ class FillModelTests(unittest.TestCase):
         completed_round = result.rounds[0]
 
         self.assertEqual(completed_round.close_mdd, D("-0.50000000"))
+        self.assertEqual(completed_round.benchmark_profit_rate, D("15.00000000"))
         self.assertEqual(completed_round.mdd_peak_date, "2024-01-02")
         self.assertEqual(completed_round.mdd_trough_date, "2024-01-03")
         self.assertEqual(completed_round.close_mdd, result.metrics["close_mdd"])

@@ -302,7 +302,7 @@ function renderExecutions() {
 
 function renderRounds() {
   const rows = app.result?.rounds || [];
-  $("#roundRows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.round_number}</td><td>${item.started_at}</td><td>${item.ended_at}</td><td>${item.trading_days}</td><td>${money(item.allocation_principal)}</td><td>${money(item.starting_equity)}</td><td>${money(item.ending_equity)}</td><td class="${cls(item.profit_amount)}">${money(item.profit_amount)}</td><td class="${cls(item.profit_rate)}">${percent(item.profit_rate, 3, true)}</td><td class="negative"><strong>${percent(item.close_mdd, 2)}</strong><small class="cell-sub">${item.mdd_peak_date} → ${item.mdd_trough_date}</small></td><td>${item.execution_count}</td><td>${money(item.total_fees)}</td></tr>`).join("") : `<tr><td colspan="12">완료된 라운드가 없습니다.</td></tr>`;
+  $("#roundRows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.round_number}</td><td>${item.started_at}</td><td>${item.ended_at}</td><td>${item.trading_days}</td><td>${money(item.allocation_principal)}</td><td>${money(item.starting_equity)}</td><td>${money(item.ending_equity)}</td><td class="${cls(item.profit_amount)}">${money(item.profit_amount)}</td><td class="${cls(item.profit_rate)}">${percent(item.profit_rate, 3, true)}</td><td class="negative"><strong>${percent(item.close_mdd, 2)}</strong><small class="cell-sub">${item.mdd_peak_date} → ${item.mdd_trough_date}</small></td><td class="${cls(item.benchmark_profit_rate)}">${percent(item.benchmark_profit_rate, 3, true)}</td><td>${item.execution_count}</td><td>${money(item.total_fees)}</td></tr>`).join("") : `<tr><td colspan="13">완료된 라운드가 없습니다.</td></tr>`;
 }
 
 function renderRoundStartRows() {

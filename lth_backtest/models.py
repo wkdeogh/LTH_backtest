@@ -123,6 +123,7 @@ class RoundResult:
     total_fees: Decimal
     ending_t_value: Decimal
     close_mdd: Decimal = ZERO
+    benchmark_profit_rate: Decimal = ZERO
     mdd_peak_date: str | None = None
     mdd_trough_date: str | None = None
 

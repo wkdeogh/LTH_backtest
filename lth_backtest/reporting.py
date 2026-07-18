@@ -77,7 +77,7 @@ main{{max-width:1280px;margin:auto;padding:22px}}.cards{{display:grid;grid-templ
 <section class="panel"><h2>체결 내역</h2><div class="table"><table id="executions"></table></div></section></main>
 <script>const DATA={payload};
 function table(id,rows,keys){{const el=document.getElementById(id);if(!rows.length){{el.innerHTML='<tr><td>데이터 없음</td></tr>';return}}el.innerHTML='<thead><tr>'+keys.map(k=>`<th>${{k}}</th>`).join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+keys.map(k=>`<td>${{r[k]??''}}</td>`).join('')+'</tr>').join('')+'</tbody>'}}
-table('rounds',DATA.rounds,['round_number','started_at','ended_at','starting_equity','ending_equity','profit_rate','close_mdd','mdd_peak_date','mdd_trough_date','execution_count']);
+table('rounds',DATA.rounds,['round_number','started_at','ended_at','starting_equity','ending_equity','profit_rate','close_mdd','benchmark_profit_rate','mdd_peak_date','mdd_trough_date','execution_count']);
 table('executions',DATA.executions,['sequence','date','side','order_type','label','order_price','fill_price','quantity','gross_amount','fees','t_before','t_after']);
 const c=document.getElementById('chart'),x=c.getContext('2d'),p=DATA.equity_curve,hasQld=p.some(v=>v.qld_benchmark_equity!=null),vals=p.flatMap(v=>hasQld?[v.equity,v.benchmark_equity,v.qld_benchmark_equity]:[v.equity,v.benchmark_equity]),lo=Math.min(...vals),hi=Math.max(...vals),pad=34;
 x.clearRect(0,0,c.width,c.height);x.strokeStyle='#dce5df';for(let i=0;i<5;i++){{let y=pad+(c.height-pad*2)*i/4;x.beginPath();x.moveTo(pad,y);x.lineTo(c.width-pad,y);x.stroke()}}

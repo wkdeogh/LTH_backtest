@@ -26,8 +26,8 @@ def calculate_star_percent(config: BacktestConfig, t_value: Decimal) -> Decimal:
     return (sell_percent - slope * t_value) / Decimal("100")
 
 
-def attach_round_drawdowns(rounds: list[RoundResult], equity_curve: list[dict]) -> None:
-    """Attach close-to-close MDD calculated independently inside each completed round."""
+def attach_round_metrics(rounds: list[RoundResult], equity_curve: list[dict]) -> None:
+    """Attach close MDD and same-symbol buy-and-hold return for each completed round."""
     for round_result in rounds:
         points = [
             point for point in equity_curve
@@ -51,6 +51,13 @@ def attach_round_drawdowns(rounds: list[RoundResult], equity_curve: list[dict]) 
                 max_drawdown_peak = peak_date
                 max_drawdown_trough = str(point["date"])
         round_result.close_mdd = round_rate(max_drawdown)
+        start_close = decimal(points[0]["close"])
+        end_close = decimal(points[-1]["close"])
+        round_result.benchmark_profit_rate = (
+            round_rate(((end_close / start_close) - ONE) * Decimal("100"))
+            if start_close > ZERO
+            else ZERO
+        )
         round_result.mdd_peak_date = max_drawdown_peak
         round_result.mdd_trough_date = max_drawdown_trough
 
@@ -435,7 +442,7 @@ class Simulator:
             if stop_after_completed_rounds is not None and len(self.rounds) >= stop_after_completed_rounds:
                 break
 
-        attach_round_drawdowns(self.rounds, self.equity_curve)
+        attach_round_metrics(self.rounds, self.equity_curve)
         metrics, monthly_returns, yearly_returns = calculate_metrics(
             self.equity_curve,
             self.executions,
