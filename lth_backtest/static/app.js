@@ -43,6 +43,7 @@ function setLoading(active, message = "정밀 계산 중입니다") {
   $("#loading").classList.toggle("hidden", !active);
   $("#backtestForm button[type=submit]").disabled = active;
   $("#runRoundStarts").disabled = active;
+  $("#refreshPrices").disabled = active;
 }
 
 function selectedSymbol() {

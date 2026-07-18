@@ -38,6 +38,11 @@ button { color: inherit; }
 
 .workspace { min-height: calc(100vh - 76px); display: grid; grid-template-columns: 330px minmax(0, 1fr); }
 .control-panel { background: #f8faf8; border-right: 1px solid var(--line-dark); padding: 20px; overflow-y: auto; height: calc(100vh - 76px); position: sticky; top: 0; }
+.market-data-manager { margin-bottom: 18px; padding: 14px; border: 1px solid #c9ded5; border-radius: 10px; background: linear-gradient(145deg,#fff 0%,#edf8f4 100%); box-shadow: 0 6px 18px rgba(8,119,91,.06); }
+.market-data-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.market-data-head h2 { margin: 2px 0 0; font-size: 15px; letter-spacing: -.3px; }
+.data-scope { padding: 4px 7px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-size: 10px; font-weight: 800; }
+.market-data-manager p { margin: 9px 0 11px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .control-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .eyebrow { color: var(--brand); font-size: 10px; font-weight: 800; letter-spacing: 1.2px; }
 .control-heading h2, .result-head h2 { margin: 2px 0 0; font-size: 20px; letter-spacing: -.6px; }

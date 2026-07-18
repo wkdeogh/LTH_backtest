@@ -25,6 +25,15 @@
 
     <main class="workspace">
       <aside class="control-panel">
+        <section class="market-data-manager" aria-labelledby="marketDataTitle">
+          <div class="market-data-head">
+            <div><span class="eyebrow">MARKET DATA</span><h2 id="marketDataTitle">전체 가격 데이터</h2></div>
+            <span class="data-scope">3종목</span>
+          </div>
+          <p>TQQQ · SOXL · QLD의 전체 이력을 오늘 날짜까지 한 번에 갱신합니다.</p>
+          <button type="button" class="button secondary full" id="refreshPrices">전체 데이터 갱신</button>
+        </section>
+
         <form id="backtestForm">
           <div class="control-heading">
             <div><span class="eyebrow">SIMULATION</span><h2>백테스트 설정</h2></div>
@@ -46,14 +55,18 @@
           </section>
 
           <section class="form-section">
-            <h3>데이터</h3>
+            <h3>가격 데이터</h3>
             <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="BackTest/data/TQQQ.csv" required><datalist id="csvOptions"></datalist></label>
+            <p class="field-help" id="datasetInfo">OHLC 데이터의 고가로 장중 지정가 체결을 확인합니다.</p>
+          </section>
+
+          <section class="form-section">
+            <h3>분석 기간</h3>
             <div class="field-grid two">
               <label class="field"><span>시작일</span><input name="start_date" type="date" value="2020-01-01" required></label>
               <label class="field"><span>종료일</span><input name="end_date" type="date" required></label>
             </div>
-            <button type="button" class="button secondary full" id="refreshPrices">TQQQ · SOXL · QLD 전체 데이터 받기</button>
-            <p class="field-help" id="datasetInfo">OHLC 데이터의 고가로 장중 지정가 체결을 확인합니다.</p>
+            <p class="field-help">선택한 기간은 일반 백테스트와 시작일별 1라운드 분석에 적용됩니다.</p>
           </section>
 
           <details class="form-section advanced">
