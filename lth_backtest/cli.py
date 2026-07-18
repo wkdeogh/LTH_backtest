@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from .data import DATA_ROOT, download_prices, load_prices, parse_date, resolve_csv_path
+from .data import DATA_ROOT, download_all_prices, download_prices, load_prices, parse_date, resolve_csv_path
 from .engine import run_backtest
 from .models import BacktestConfig
 from .precision import decimal, to_primitive
@@ -83,14 +83,16 @@ def command_download(args: argparse.Namespace) -> None:
     print(f"저장: {download_prices(args.symbol, args.start_date, args.end_date, target)}")
 
 
+def command_download_all(args: argparse.Namespace) -> None:
+    for path in download_all_prices(args.end_date, Path(args.out_dir).resolve() if args.out_dir else DATA_ROOT):
+        print(f"저장: {path}")
+
+
 def command_all(args: argparse.Namespace) -> object:
-    target = resolve_csv_path(args.csv, args.symbol) if args.csv else DATA_ROOT / f"{args.symbol.upper()}.csv"
-    download_prices(args.symbol, args.start_date, args.end_date, target)
-    args.csv = str(target)
+    download_all_prices()
+    args.csv = str(resolve_csv_path(args.csv, args.symbol) if args.csv else DATA_ROOT / f"{args.symbol.upper()}.csv")
     if not args.no_qld:
-        qld_target = resolve_csv_path(args.qld_csv, "QLD") if args.qld_csv else DATA_ROOT / "QLD.csv"
-        download_prices("QLD", args.start_date, args.end_date, qld_target)
-        args.qld_csv = str(qld_target)
+        args.qld_csv = str(resolve_csv_path(args.qld_csv, "QLD") if args.qld_csv else DATA_ROOT / "QLD.csv")
     return command_run(args)
 
 
@@ -143,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("end_date", type=lambda value: parse_date(value, "종료일"))
     download.add_argument("--out")
     download.set_defaults(func=command_download)
+
+    download_all = sub.add_parser("download-all", help="TQQQ, SOXL, QLD 전체 이력을 오늘까지 다운로드")
+    download_all.add_argument("--end-date", default=date.today().isoformat(), type=lambda value: parse_date(value, "종료일"))
+    download_all.add_argument("--out-dir")
+    download_all.set_defaults(func=command_download_all)
 
     def add_run(target: argparse.ArgumentParser) -> None:
         target.add_argument("symbol", choices=["TQQQ", "SOXL"])

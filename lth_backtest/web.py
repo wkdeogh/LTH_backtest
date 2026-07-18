@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from .data import DATA_ROOT, PACKAGE_ROOT, download_prices, load_prices, resolve_csv_path
+from .data import DATA_ROOT, PACKAGE_ROOT, download_all_prices, load_prices, resolve_csv_path
 from .engine import run_backtest
 from .models import BacktestConfig
 from .precision import decimal, to_primitive
@@ -168,10 +168,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(result)
                 return
             if path_value == "/api/download":
-                symbol = str(payload.get("symbol", "TQQQ")).upper()
-                out_path = DATA_ROOT / f"{symbol}.csv"
-                saved = download_prices(symbol, str(payload["start_date"]), str(payload["end_date"]), out_path)
-                self._json({"saved_path": str(saved), "dataset": _dataset_meta(saved)})
+                saved_paths = download_all_prices()
+                self._json({
+                    "downloaded_at": date.today().isoformat(),
+                    "datasets": [_dataset_meta(path) for path in saved_paths],
+                })
                 return
             if path_value == "/api/report":
                 result_payload = payload.get("result")

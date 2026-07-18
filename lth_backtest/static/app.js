@@ -286,12 +286,16 @@ async function downloadReport() {
 }
 
 async function refreshPrices() {
-  const form = $("#backtestForm");
-  const payload = { symbol: selectedSymbol(), start_date: form.elements.start_date.value, end_date: form.elements.end_date.value };
-  setLoading(true, "가격 데이터 다운로드 중입니다");
+  setLoading(true, "TQQQ · SOXL · QLD 전체 이력을 다운로드 중입니다");
   try {
-    const result = await api("/api/download", payload);
-    app.meta.datasets = app.meta.datasets.filter(item => item.path !== result.saved_path); app.meta.datasets.push(result.dataset); refreshDatasetChoices(true); toast(`저장했습니다: ${result.saved_path}`);
+    const result = await api("/api/download", { scope: "all" });
+    const downloaded = result.datasets.filter(Boolean);
+    const paths = new Set(downloaded.map(item => item.path));
+    app.meta.datasets = app.meta.datasets.filter(item => !paths.has(item.path));
+    app.meta.datasets.push(...downloaded);
+    refreshDatasetChoices(true);
+    const summary = downloaded.map(item => `${item.name.replace(".csv", "")} ${item.start}~${item.end}`).join(" · ");
+    toast(`전체 데이터 저장 완료 · ${summary}`);
   } catch (error) { toast(error.message, true); }
   finally { setLoading(false); }
 }

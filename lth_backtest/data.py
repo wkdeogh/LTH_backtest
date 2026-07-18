@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlencode
@@ -16,6 +16,8 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PACKAGE_ROOT.parent
 DATA_ROOT = REPOSITORY_ROOT / "data"
 VALID_PRICE_SYMBOLS = {"TQQQ", "SOXL", "QLD"}
+FULL_HISTORY_START_DATE = "1970-01-02"
+DOWNLOAD_SYMBOLS = ("TQQQ", "SOXL", "QLD")
 
 
 def parse_date(value: str, label: str = "날짜") -> str:
@@ -201,3 +203,19 @@ def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path 
         for row in rows:
             writer.writerow({key: str(value) if isinstance(value, Decimal) else value for key, value in row.items()})
     return target
+
+
+def download_all_prices(end_date: str | None = None, out_dir: Path | None = None) -> list[Path]:
+    """Download complete available histories for every strategy and benchmark symbol."""
+    resolved_end_date = parse_date(end_date or date.today().isoformat(), "종료일")
+    target_dir = out_dir or DATA_ROOT
+    target_dir.mkdir(parents=True, exist_ok=True)
+    return [
+        download_prices(
+            symbol,
+            FULL_HISTORY_START_DATE,
+            resolved_end_date,
+            target_dir / f"{symbol}.csv",
+        )
+        for symbol in DOWNLOAD_SYMBOLS
+    ]

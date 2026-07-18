@@ -4,8 +4,9 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
-from lth_backtest.data import load_prices
+from lth_backtest.data import DOWNLOAD_SYMBOLS, FULL_HISTORY_START_DATE, download_all_prices, load_prices
 
 
 class DataValidationTests(unittest.TestCase):
@@ -46,6 +47,20 @@ class DataValidationTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "고가"):
             load_prices(path, "2024-01-01", "2024-01-03")
+
+    def test_download_all_requests_every_symbol_for_full_history(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        out_dir = Path(directory.name)
+
+        with patch("lth_backtest.data.download_prices", side_effect=lambda symbol, start, end, path: path) as download:
+            paths = download_all_prices("2026-07-18", out_dir)
+
+        self.assertEqual([path.name for path in paths], [f"{symbol}.csv" for symbol in DOWNLOAD_SYMBOLS])
+        self.assertEqual(
+            [(call.args[0], call.args[1], call.args[2]) for call in download.call_args_list],
+            [(symbol, FULL_HISTORY_START_DATE, "2026-07-18") for symbol in DOWNLOAD_SYMBOLS],
+        )
 
 
 if __name__ == "__main__":

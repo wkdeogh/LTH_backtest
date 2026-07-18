@@ -25,6 +25,8 @@ python3 -m lth_backtest.cli serve --open
 - JSON, 체결 CSV, 단독 실행형 HTML 리포트 내보내기
 - version2 전용 Yahoo 조정 OHLCV 다운로드
 
+브라우저의 `TQQQ · SOXL · QLD 전체 데이터 받기` 버튼은 세 종목의 전체 가용 이력을 오늘 날짜까지 한 번에 갱신합니다.
+
 서버 종료는 실행한 터미널에서 `Ctrl+C`입니다.
 
 ## CLI
@@ -43,6 +45,12 @@ python3 -m lth_backtest.cli run TQQQ 40 20000 2020-01-01 2024-12-31 \
 
 ```bash
 python3 -m lth_backtest.cli all SOXL 20 20000 2020-01-01 2024-12-31
+```
+
+세 종목 전체 이력만 오늘까지 갱신:
+
+```bash
+python3 -m lth_backtest.cli download-all
 ```
 
 랜덤 기간 비교와 HTML 리포트:
