@@ -13,7 +13,7 @@
       <div class="brand-mark">V2</div>
       <div class="brand-copy">
         <h1>BackTest <span>version2</span></h1>
-        <p>무한매수법 V4 · 조정 OHLC 정밀 시뮬레이터</p>
+        <p>무한매수법 V4 · 실제 거래 OHLC 정밀 시뮬레이터</p>
       </div>
       <div class="top-actions">
         <span class="status-dot" id="serverStatus">연결 확인 중</span>
@@ -48,7 +48,7 @@
           <section class="form-section">
             <h3>가격 데이터</h3>
             <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="data/SOXL.csv" required><datalist id="csvOptions"></datalist></label>
-            <p class="field-help" id="datasetInfo">OHLC 데이터의 고가로 장중 지정가 체결을 확인합니다.</p>
+            <p class="field-help" id="datasetInfo">분할만 반영하고 배당은 소급 보정하지 않은 실제 OHLC를 사용합니다.</p>
           </section>
 
           <section class="form-section">
@@ -95,7 +95,7 @@
             <div><span class="eyebrow">MARKET DATA</span><h2 id="marketDataTitle">전체 가격 데이터</h2></div>
             <span class="data-scope">3종목</span>
           </div>
-          <p>TQQQ · SOXL · QLD의 전체 이력을 오늘 날짜까지 한 번에 갱신합니다.</p>
+          <p>TQQQ · SOXL · QLD의 분할 반영·배당 미보정 실제 거래가격을 오늘까지 갱신합니다.</p>
           <button type="button" class="button secondary full" id="refreshPrices">전체 데이터 갱신</button>
         </section>
       </aside>
@@ -119,7 +119,7 @@
             <div class="empty-visual"><span></span><span></span><span></span><span></span><span></span></div>
             <h2>조건을 정하고 백테스트를 실행하세요</h2>
             <p>장중 고가 최종매도, LOC 종가 체결, 리버스모드, 단리·복리와 거래비용을 한 번에 분석합니다.</p>
-            <div class="assumption-strip"><span>가격</span><strong>조정 OHLC</strong><i></i><span>주문가</span><strong>소수 2자리</strong><i></i><span>T값</span><strong>소수 10자리</strong></div>
+            <div class="assumption-strip"><span>가격</span><strong>실제 OHLC</strong><i></i><span>주문가</span><strong>소수 2자리</strong><i></i><span>T값</span><strong>소수 10자리</strong></div>
           </div>
 
           <div class="results-content hidden" id="resultsContent">
@@ -155,10 +155,10 @@
         </section>
 
         <section class="tab-page" id="tab-candles">
-          <div class="empty-mini" id="candleEmpty">백테스트를 실행하면 선택 기간의 조정 OHLC 캔들과 거래량을 확인할 수 있습니다.</div>
+          <div class="empty-mini" id="candleEmpty">백테스트를 실행하면 선택 기간의 실제 OHLC 캔들과 거래량을 확인할 수 있습니다.</div>
           <div class="hidden" id="candleContent">
             <div class="candle-heading">
-              <div><span class="eyebrow">ADJUSTED OHLCV</span><h2 id="candleTitle">캔들 차트</h2><p>선택한 백테스트 기간의 분할·배당 조정 시가, 고가, 저가, 종가입니다.</p></div>
+              <div><span class="eyebrow">ACTUAL OHLCV</span><h2 id="candleTitle">캔들 차트</h2><p>분할은 반영하지만 배당은 소급 보정하지 않은 실제 시가, 고가, 저가, 종가입니다.</p></div>
               <div class="candle-controls" aria-label="캔들 표시 범위">
                 <button class="button secondary" id="candlePrev" type="button" aria-label="이전 구간">← 이전</button>
                 <label><span>표시 구간</span><select id="candleRange"><option value="60">60거래일</option><option value="120" selected>120거래일</option><option value="252">252거래일</option><option value="0">전체 기간</option></select></label>
@@ -172,7 +172,7 @@
               </div>
               <div class="canvas-wrap candle"><canvas id="candlestickChart" role="img" aria-label="선택 기간 OHLC 캔들 차트"></canvas><div class="chart-tooltip candle-tooltip hidden" id="candleTooltip"></div></div>
             </article>
-            <div class="analysis-note">가격축과 캔들은 조정 OHLC 기준입니다. 종가가 시가보다 높으면 빨강, 낮으면 파랑으로 표시합니다. 거래량은 CSV의 일별 원자료이며, 긴 기간의 `전체 기간` 보기는 흐름 확인용이므로 세부 캔들은 60·120·252거래일 보기로 확인하세요.</div>
+            <div class="analysis-note">가격축과 캔들은 증권사 가격 차트와 비교 가능한 분할 반영·배당 미보정 OHLC 기준입니다. 종가가 시가보다 높으면 빨강, 낮으면 파랑으로 표시합니다. 거래량은 CSV의 일별 원자료이며, 긴 기간의 `전체 기간` 보기는 흐름 확인용이므로 세부 캔들은 60·120·252거래일 보기로 확인하세요.</div>
           </div>
         </section>
 

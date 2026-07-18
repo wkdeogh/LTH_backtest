@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from .data import DATA_ROOT, PACKAGE_ROOT, download_all_prices, load_prices, resolve_csv_path
+from .data import DATA_ROOT, PACKAGE_ROOT, PRICE_BASIS_ACTUAL, download_all_prices, load_prices, resolve_csv_path
 from .engine import run_backtest
 from .models import BacktestConfig
 from .precision import decimal, to_primitive
@@ -51,16 +51,25 @@ def _dataset_meta(path: Path) -> dict | None:
             date_key = next((key for key in reader.fieldnames or [] if key.strip().lower() == "date"), None)
             if date_key is None:
                 return None
-            dates = sorted(row[date_key].strip() for row in reader if row.get(date_key, "").strip())
+            basis_key = next((key for key in reader.fieldnames or [] if key.strip().lower() == "price_basis"), None)
+            dates: list[str] = []
+            bases: set[str] = set()
+            for row in reader:
+                if row.get(date_key, "").strip():
+                    dates.append(row[date_key].strip())
+                if basis_key and row.get(basis_key, "").strip():
+                    bases.add(row[basis_key].strip().lower())
+            dates.sort()
         if not dates:
             return None
-        return {"path": str(path), "name": path.name, "rows": len(dates), "start": dates[0], "end": dates[-1], "dates": dates}
+        price_basis = PRICE_BASIS_ACTUAL if bases == {PRICE_BASIS_ACTUAL} else "legacy_or_custom"
+        return {"path": str(path), "name": path.name, "rows": len(dates), "start": dates[0], "end": dates[-1], "dates": dates, "price_basis": price_basis}
     except (OSError, csv.Error, UnicodeError):
         return None
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "BackTestV2/2.3.1"
+    server_version = "BackTestV2/2.4.0"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {format % args}")
@@ -119,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
                     item = _dataset_meta(path)
                     if item:
                         datasets.append(item)
-            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.3.1"})
+            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.4.0"})
             return
         self._serve_static(path_value)
 

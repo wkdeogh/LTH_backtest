@@ -170,12 +170,14 @@ function configureDateRange(dataset) {
 function refreshDatasetChoices(force = false) {
   const symbol = selectedSymbol();
   const matches = matchingDatasets(symbol);
-  $("#csvOptions").innerHTML = matches.map(item => `<option value="${escapeHtml(item.path)}">${item.start} ~ ${item.end} · ${item.rows.toLocaleString()}행</option>`).join("");
+  $("#csvOptions").innerHTML = matches.map(item => `<option value="${escapeHtml(item.path)}">${item.start} ~ ${item.end} · ${item.rows.toLocaleString()}행 · ${item.price_basis === "actual_split_adjusted" ? "실거래가" : "갱신 필요"}</option>`).join("");
   const input = $("#csvPath");
   if (force || !input.value) input.value = matches[0]?.path || `data/${symbol}.csv`;
   const current = matches.find(item => item.path === input.value);
   $("#datasetInfo").textContent = current
-    ? `${current.start} ~ ${current.end} · ${current.rows.toLocaleString()}거래일 · OHLC 고가 포함`
+    ? current.price_basis === "actual_split_adjusted"
+      ? `${current.start} ~ ${current.end} · ${current.rows.toLocaleString()}거래일 · 실제 OHLC · 배당 미보정`
+      : `${current.start} ~ ${current.end} · 기존 조정 데이터 · 아래에서 전체 데이터 갱신 필요`
     : "CSV 경로를 직접 입력하거나 데이터를 다운로드하세요.";
   configureDateRange(current);
 }
@@ -592,7 +594,7 @@ async function refreshPrices() {
     app.meta.datasets.push(...downloaded);
     refreshDatasetChoices(true);
     const summary = downloaded.map(item => `${item.name.replace(".csv", "")} ${item.start}~${item.end}`).join(" · ");
-    toast(`전체 데이터 저장 완료 · ${summary}`);
+    toast(`실제 거래가격 저장 완료 · ${summary}`);
   } catch (error) { toast(error.message, true); }
   finally { setLoading(false); }
 }

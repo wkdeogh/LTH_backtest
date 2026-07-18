@@ -18,6 +18,7 @@ DATA_ROOT = REPOSITORY_ROOT / "data"
 VALID_PRICE_SYMBOLS = {"TQQQ", "SOXL", "QLD"}
 FULL_HISTORY_START_DATE = "1970-01-02"
 DOWNLOAD_SYMBOLS = ("TQQQ", "SOXL", "QLD")
+PRICE_BASIS_ACTUAL = "actual_split_adjusted"
 
 
 def parse_date(value: str, label: str = "날짜") -> str:
@@ -55,6 +56,7 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
     bars: list[PriceBar] = []
     seen: set[str] = set()
     adjusted_rows = 0
+    price_bases: set[str] = set()
     with csv_path.open("r", newline="", encoding="utf-8-sig") as file:
         reader = csv.DictReader(file)
         required = {"date", "open", "high", "low", "close"}
@@ -73,11 +75,11 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
                 raise ValueError(f"중복 거래일이 있습니다: {date_value}")
             seen.add(date_value)
             try:
-                open_price = decimal(row.get("open"))
-                high_price = decimal(row.get("high"))
-                low_price = decimal(row.get("low"))
-                close_price = decimal(row.get("close"))
-                adj_close = decimal(row.get("adj_close") or row.get("adj close") or close_price)
+                open_price = round_market_price(decimal(row.get("open")))
+                high_price = round_market_price(decimal(row.get("high")))
+                low_price = round_market_price(decimal(row.get("low")))
+                close_price = round_market_price(decimal(row.get("close")))
+                adj_close = round_market_price(decimal(row.get("adj_close") or row.get("adj close") or close_price))
                 volume = int(decimal(row.get("volume") or 0))
             except Exception as error:
                 raise ValueError(f"{date_value} 행에 숫자가 아닌 값이 있습니다.") from error
@@ -88,18 +90,22 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
                 raise ValueError(f"{date_value} 행의 고가가 시가/저가/종가보다 작습니다.")
             if low_price > min(open_price, close_price, high_price):
                 raise ValueError(f"{date_value} 행의 저가가 시가/고가/종가보다 큽니다.")
+            price_basis = (row.get("price_basis") or "").strip().lower()
+            if price_basis:
+                price_bases.add(price_basis)
             if adj_close != close_price:
                 adjusted_rows += 1
-                ratio = adj_close / close_price
-                open_price = round_market_price(open_price * ratio)
-                high_price = round_market_price(high_price * ratio)
-                low_price = round_market_price(low_price * ratio)
-                close_price = round_market_price(adj_close)
             bars.append(PriceBar(date_value, open_price, high_price, low_price, close_price, adj_close, volume))
 
     bars.sort(key=lambda item: item.date)
     if len(bars) < 2:
         raise ValueError("백테스트에는 최소 2거래일의 가격 데이터가 필요합니다.")
+    if len(price_bases) > 1:
+        raise ValueError("CSV에 서로 다른 가격 기준이 섞여 있습니다.")
+    is_managed_dataset = csv_path.resolve().parent == DATA_ROOT.resolve()
+    price_basis = next(iter(price_bases), "user_provided")
+    if is_managed_dataset and price_basis != PRICE_BASIS_ACTUAL:
+        raise ValueError("기존 배당 조정 데이터입니다. 왼쪽 패널 맨 아래에서 전체 데이터를 갱신한 뒤 다시 실행하세요.")
 
     gap_count = 0
     max_gap_days = 0
@@ -115,7 +121,10 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
         "first_date": bars[0].date,
         "last_date": bars[-1].date,
         "adjusted_close_diff_rows": adjusted_rows,
-        "auto_adjusted_ohlc_rows": adjusted_rows,
+        "auto_adjusted_ohlc_rows": 0,
+        "price_basis": price_basis,
+        "dividend_adjustment": "not_applied_to_ohlc",
+        "split_adjustment": "included_in_yahoo_quote_ohlc",
         "long_gap_count": gap_count,
         "max_calendar_gap_days": max_gap_days,
         "has_ohlc": True,
@@ -171,7 +180,6 @@ def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path 
             continue
         if close_raw is None or adj_raw is None or close_raw <= 0 or adj_raw <= 0:
             continue
-        ratio = decimal(adj_raw) / decimal(close_raw)
         values: dict[str, Decimal] = {}
         valid = True
         for name in ("open", "high", "low", "close"):
@@ -180,7 +188,7 @@ def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path 
             if raw is None or raw <= 0:
                 valid = False
                 break
-            values[name] = round_market_price(decimal(raw) * ratio)
+            values[name] = round_market_price(decimal(raw))
         if not valid:
             continue
         rows.append({
@@ -191,6 +199,7 @@ def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path 
             "close": values["close"],
             "adj_close": round_market_price(decimal(adj_raw)),
             "volume": int((quote.get("volume", [0])[index] if index < len(quote.get("volume", [])) else 0) or 0),
+            "price_basis": PRICE_BASIS_ACTUAL,
         })
     if not rows:
         raise RuntimeError("유효한 가격 행이 없습니다.")
@@ -198,7 +207,7 @@ def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path 
     target = out_path or (DATA_ROOT / f"{symbol}.csv")
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=["date", "open", "high", "low", "close", "adj_close", "volume"])
+        writer = csv.DictWriter(file, fieldnames=["date", "open", "high", "low", "close", "adj_close", "volume", "price_basis"])
         writer.writeheader()
         for row in rows:
             writer.writerow({key: str(value) if isinstance(value, Decimal) else value for key, value in row.items()})

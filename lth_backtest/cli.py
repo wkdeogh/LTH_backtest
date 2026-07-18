@@ -139,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="무한매수법 V4 정밀 백테스터 version2")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    download = sub.add_parser("download", help="Yahoo Finance 조정 OHLCV 다운로드")
+    download = sub.add_parser("download", help="Yahoo Finance 실제 OHLCV 다운로드 (분할 반영·배당 미보정)")
     download.add_argument("symbol", choices=["TQQQ", "SOXL", "QLD"])
     download.add_argument("start_date", type=lambda value: parse_date(value, "시작일"))
     download.add_argument("end_date", type=lambda value: parse_date(value, "종료일"))

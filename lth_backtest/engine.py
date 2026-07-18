@@ -86,6 +86,8 @@ class Simulator:
             self.warnings.append("종가 전용 체결 모델입니다. 장중 고가가 최종 매도가를 통과한 체결을 누락할 수 있습니다.")
         if any((config.slippage_bps, config.commission, config.sell_fee_bps)):
             self.warnings.append("수수료/슬리피지는 사용자 입력 가정이며 실제 증권사 체결 비용과 다를 수 있습니다.")
+        if self.diagnostics.get("price_basis") == "actual_split_adjusted":
+            self.warnings.append("매매 가격은 분할 반영·배당 미보정 실제 OHLC입니다. ETF 현금 분배금은 전략 자산에 별도로 가산하지 않습니다.")
 
     def _next_fill_price(self, side: str, base_price: Decimal, limit_price: Decimal | None = None) -> Decimal:
         slip = self.config.slippage_bps / Decimal("10000")

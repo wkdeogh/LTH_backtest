@@ -18,10 +18,10 @@ class WebConfigurationTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         path = Path(directory.name) / "SOXL.csv"
         path.write_text(
-            "date,open,high,low,close,adj_close,volume\n"
-            "2024-01-05,10,11,9,10,10,100\n"
-            "2024-01-02,10,11,9,10,10,100\n"
-            "2024-01-03,10,11,9,10,10,100\n",
+            "date,open,high,low,close,adj_close,volume,price_basis\n"
+            "2024-01-05,10,11,9,10,10,100,actual_split_adjusted\n"
+            "2024-01-02,10,11,9,10,10,100,actual_split_adjusted\n"
+            "2024-01-03,10,11,9,10,10,100,actual_split_adjusted\n",
             encoding="utf-8",
         )
 
@@ -32,6 +32,7 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertEqual(metadata["start"], "2024-01-02")
         self.assertEqual(metadata["end"], "2024-01-05")
         self.assertEqual(metadata["rows"], 3)
+        self.assertEqual(metadata["price_basis"], "actual_split_adjusted")
 
     def test_html_defaults_and_range_controls_are_present(self) -> None:
         html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
@@ -40,6 +41,8 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn('id="dateRangeStart"', html)
         self.assertIn('id="dateRangeEnd"', html)
         self.assertLess(html.index('id="backtestForm"'), html.index('id="marketDataTitle"'))
+        self.assertIn("실제 거래 OHLC", html)
+        self.assertIn("ACTUAL OHLCV", html)
 
     def test_candlestick_uses_visible_ohlc_bodies_and_korean_colors(self) -> None:
         html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
