@@ -57,6 +57,26 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn(".candle-up::before { background: #e43f45; }", stylesheet)
         self.assertIn(".candle-down::before { background: #1976d2; }", stylesheet)
 
+    def test_round_mdd_and_round_start_visualizations_are_present(self) -> None:
+        html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+        javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+        stylesheet = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("종가 MDD</th><th>체결", html)
+        self.assertIn('id="roundStartTimelineChart"', html)
+        self.assertIn('id="roundStartScatterChart"', html)
+        self.assertIn("function drawRoundStartTimelineChart()", javascript)
+        self.assertIn("function drawRoundStartScatterChart()", javascript)
+        self.assertIn("item.mdd_peak_date", javascript)
+        self.assertIn(".round-start-visuals", stylesheet)
+
+    def test_equity_tooltip_shows_return_from_initial_principal(self) -> None:
+        javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("Number(point.equity) / initialEquity - 1", javascript)
+        self.assertIn("<br>수익률 ${percent(profitRate, 2, true)}", javascript)
+        self.assertNotIn("<br>낙폭 ${percent(point.drawdown)}", javascript)
+
 
 if __name__ == "__main__":
     unittest.main()

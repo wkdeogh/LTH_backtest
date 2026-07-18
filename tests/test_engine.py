@@ -99,6 +99,21 @@ class FillModelTests(unittest.TestCase):
         self.assertEqual(result.rounds[0].ending_equity, D("20075.0000"))
         self.assertEqual(result.state["round_number"], 2)
 
+    def test_completed_round_includes_its_own_close_mdd_and_dates(self) -> None:
+        prices = [
+            bar("2024-01-02"),
+            bar("2024-01-03", open="80", high="80", low="80", close="80"),
+            bar("2024-01-04", open="115", high="120", low="115", close="115"),
+        ]
+
+        result = run_backtest(BacktestConfig("TQQQ", 40, D("20000")), prices)
+        completed_round = result.rounds[0]
+
+        self.assertEqual(completed_round.close_mdd, D("-0.50000000"))
+        self.assertEqual(completed_round.mdd_peak_date, "2024-01-02")
+        self.assertEqual(completed_round.mdd_trough_date, "2024-01-03")
+        self.assertEqual(completed_round.close_mdd, result.metrics["close_mdd"])
+
 
 class ReverseModeTests(unittest.TestCase):
     def test_reverse_can_return_to_normal_after_first_day_close(self) -> None:
