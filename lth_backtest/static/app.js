@@ -22,6 +22,7 @@ const number = (value, digits = 2) => value == null ? "-" : Number(value).toLoca
 const percent = (value, digits = 2, sign = false) => value == null ? "-" : `${sign && Number(value) > 0 ? "+" : ""}${number(value, digits)}%`;
 const cls = value => Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : "";
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+const CANDLE_COLORS = Object.freeze({ rise: "#e43f45", fall: "#1976d2", flat: "#78837d" });
 
 async function api(path, body) {
   const response = await fetch(path, {
@@ -454,12 +455,14 @@ function drawCandlestick() {
   const priceY = value => padding.top + (high - Number(value)) / (high - low) * priceHeight;
   const slot = plotWidth / bars.length;
   const candleX = index => padding.left + slot * (index + .5);
-  const bodyWidth = Math.max(1, Math.min(slot * .64, 12));
+  const bodyWidth = slot < 2 ? Math.max(slot * .82, .7) : Math.max(3, Math.min(slot * .72, 14));
   const volumeTop = priceBottom + sectionGap;
   const volumeBottom = height - padding.bottom;
   const maxVolume = Math.max(...bars.map(item => Number(item.volume || 0)), 1);
 
   ctx.clearRect(0, 0, width, height);
+  ctx.globalAlpha = 1;
+  ctx.lineCap = "butt";
   ctx.font = "10px -apple-system, sans-serif";
   ctx.textBaseline = "middle";
   for (let index = 0; index < 5; index++) {
@@ -475,16 +478,23 @@ function drawCandlestick() {
 
   bars.forEach((item, index) => {
     const x = candleX(index);
-    const isUp = Number(item.close) >= Number(item.open);
-    const color = isUp ? "#08775b" : "#c43e45";
+    const open = Number(item.open), close = Number(item.close);
+    const direction = close > open ? "rise" : close < open ? "fall" : "flat";
+    const color = CANDLE_COLORS[direction];
     const volumeValue = Number(item.volume || 0);
     const volumeBarHeight = volumeValue / maxVolume * Math.max(volumeBottom - volumeTop - 6, 1);
-    ctx.fillStyle = isUp ? "rgba(8,119,91,.22)" : "rgba(196,62,69,.20)";
+    ctx.fillStyle = direction === "rise" ? "rgba(228,63,69,.22)" : direction === "fall" ? "rgba(25,118,210,.20)" : "rgba(120,131,125,.20)";
     ctx.fillRect(x - bodyWidth / 2, volumeBottom - volumeBarHeight, bodyWidth, volumeBarHeight);
 
-    ctx.strokeStyle = color; ctx.lineWidth = slot < 2 ? .7 : 1; ctx.beginPath(); ctx.moveTo(x, priceY(item.high)); ctx.lineTo(x, priceY(item.low)); ctx.stroke();
-    const openY = priceY(item.open), closeY = priceY(item.close);
-    const bodyTop = Math.min(openY, closeY), bodyHeight = Math.max(Math.abs(closeY - openY), 1);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = slot < 2 ? Math.max(slot * .55, .45) : 1.2;
+    ctx.beginPath(); ctx.moveTo(x, priceY(item.high)); ctx.lineTo(x, priceY(item.low)); ctx.stroke();
+
+    const openY = priceY(open), closeY = priceY(close);
+    const rawBodyHeight = Math.abs(closeY - openY);
+    const minimumBodyHeight = slot < 2 ? 1 : 3;
+    const bodyHeight = Math.max(rawBodyHeight, minimumBodyHeight);
+    const bodyTop = (openY + closeY) / 2 - bodyHeight / 2;
     ctx.fillStyle = color;
     ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
   });
@@ -630,12 +640,13 @@ function showCandleTooltip(event) {
   const point = app.chartPoints[globalIndex];
   const previous = app.chartPoints[globalIndex - 1];
   const change = previous && Number(previous.close) !== 0 ? (Number(point.close) / Number(previous.close) - 1) * 100 : null;
+  const intradayChange = Number(point.open) !== 0 ? (Number(point.close) / Number(point.open) - 1) * 100 : null;
   if (app.candleHoverIndex !== globalIndex) {
     app.candleHoverIndex = globalIndex;
     drawCandlestick();
   }
   const tip = $("#candleTooltip");
-  tip.innerHTML = `<strong>${point.date}</strong><div class="tooltip-grid"><span>시가</span><span>${price(point.open)}</span><span>고가</span><span>${price(point.high)}</span><span>저가</span><span>${price(point.low)}</span><span>종가</span><span>${price(point.close)}</span><span>전일 대비</span><span class="${cls(change)}">${percent(change, 3, true)}</span><span>거래량</span><span>${volumeNumber(point.volume)}</span></div>`;
+  tip.innerHTML = `<strong>${point.date}</strong><div class="tooltip-grid"><span>시가</span><span>${price(point.open)}</span><span>고가</span><span>${price(point.high)}</span><span>저가</span><span>${price(point.low)}</span><span>종가</span><span>${price(point.close)}</span><span>시가 대비</span><span class="${intradayChange > 0 ? "candle-rise-text" : intradayChange < 0 ? "candle-fall-text" : ""}">${percent(intradayChange, 3, true)}</span><span>전일 대비</span><span class="${cls(change)}">${percent(change, 3, true)}</span><span>거래량</span><span>${volumeNumber(point.volume)}</span></div>`;
   tip.style.left = `${Math.max(6, Math.min(localX + 14, rect.width - 210))}px`;
   tip.style.top = `${Math.max(6, Math.min(event.clientY - rect.top - 58, rect.height - 190))}px`;
   tip.classList.remove("hidden");

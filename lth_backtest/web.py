@@ -60,7 +60,7 @@ def _dataset_meta(path: Path) -> dict | None:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "BackTestV2/2.3"
+    server_version = "BackTestV2/2.3.1"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {format % args}")
@@ -119,7 +119,7 @@ class Handler(BaseHTTPRequestHandler):
                     item = _dataset_meta(path)
                     if item:
                         datasets.append(item)
-            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.3"})
+            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.3.1"})
             return
         self._serve_static(path_value)
 

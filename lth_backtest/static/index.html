@@ -167,12 +167,12 @@
             </div>
             <article class="panel candle-panel">
               <div class="panel-head candle-panel-head">
-                <div><h3 id="candleWindowInfo">-</h3><p>캔들에 마우스를 올리면 정확한 OHLCV를 표시합니다.</p></div>
-                <div class="candle-legend"><span class="candle-up">상승</span><span class="candle-down">하락</span><span class="candle-volume">거래량</span></div>
+                <div><h3 id="candleWindowInfo">-</h3><p>몸통은 시가↔종가, 얇은 꼬리는 저가↔고가를 표시합니다.</p></div>
+                <div class="candle-legend"><span class="candle-up">상승 · 빨강</span><span class="candle-down">하락 · 파랑</span><span class="candle-volume">거래량</span></div>
               </div>
               <div class="canvas-wrap candle"><canvas id="candlestickChart" role="img" aria-label="선택 기간 OHLC 캔들 차트"></canvas><div class="chart-tooltip candle-tooltip hidden" id="candleTooltip"></div></div>
             </article>
-            <div class="analysis-note">가격축과 캔들은 조정 OHLC 기준입니다. 거래량은 CSV의 일별 원자료이며, 긴 기간의 `전체 기간` 보기는 흐름 확인용이므로 세부 캔들은 60·120·252거래일 보기로 확인하세요.</div>
+            <div class="analysis-note">가격축과 캔들은 조정 OHLC 기준입니다. 종가가 시가보다 높으면 빨강, 낮으면 파랑으로 표시합니다. 거래량은 CSV의 일별 원자료이며, 긴 기간의 `전체 기간` 보기는 흐름 확인용이므로 세부 캔들은 60·120·252거래일 보기로 확인하세요.</div>
           </div>
         </section>
 

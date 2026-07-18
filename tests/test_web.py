@@ -41,6 +41,19 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn('id="dateRangeEnd"', html)
         self.assertLess(html.index('id="backtestForm"'), html.index('id="marketDataTitle"'))
 
+    def test_candlestick_uses_visible_ohlc_bodies_and_korean_colors(self) -> None:
+        html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+        javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+        stylesheet = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn('CANDLE_COLORS = Object.freeze({ rise: "#e43f45", fall: "#1976d2"', javascript)
+        self.assertIn("const bodyHeight = Math.max(rawBodyHeight, minimumBodyHeight);", javascript)
+        self.assertIn("ctx.moveTo(x, priceY(item.high)); ctx.lineTo(x, priceY(item.low));", javascript)
+        self.assertIn("상승 · 빨강", html)
+        self.assertIn("하락 · 파랑", html)
+        self.assertIn(".candle-up::before { background: #e43f45; }", stylesheet)
+        self.assertIn(".candle-down::before { background: #1976d2; }", stylesheet)
+
 
 if __name__ == "__main__":
     unittest.main()
