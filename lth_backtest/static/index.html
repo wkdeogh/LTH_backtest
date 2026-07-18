@@ -184,7 +184,7 @@
 
         <section class="tab-page" id="tab-rounds">
           <div class="table-toolbar"><div><h2>완료 라운드</h2><p>단리는 운용원금과 실제 라운드 시작자산을 구분합니다.</p></div></div>
-          <div class="data-table"><table><thead><tr><th>회차</th><th>시작</th><th>종료</th><th>거래일</th><th>운용원금</th><th>시작자산</th><th>종료자산</th><th>손익</th><th>수익률</th><th>체결</th><th>비용</th></tr></thead><tbody id="roundRows"></tbody></table></div>
+          <div class="data-table"><table><thead><tr><th>회차</th><th>시작</th><th>종료</th><th>거래일</th><th>운용원금</th><th>시작자산</th><th>종료자산</th><th>손익</th><th>수익률</th><th>종가 MDD</th><th>체결</th><th>비용</th></tr></thead><tbody id="roundRows"></tbody></table></div>
         </section>
 
         <section class="tab-page" id="tab-round-starts">
@@ -204,6 +204,24 @@
           <div class="hidden" id="roundStartResults">
             <div class="summary-grid round-analysis-summary" id="roundStartSummary"></div>
             <div class="analysis-note" id="roundStartNote"></div>
+            <div class="round-start-visuals">
+              <article class="panel round-start-chart-panel">
+                <div class="panel-head">
+                  <div><h3>시작일별 수익률·MDD 흐름</h3><p>시작일을 하루씩 이동했을 때 결과가 어떻게 달라지는지 보여줍니다.</p></div>
+                  <div class="round-chart-legend"><span class="completed-return">완료 수익률</span><span class="incomplete-return">미종료 평가수익률</span><span class="round-mdd">종가 MDD</span></div>
+                </div>
+                <div class="round-chart-wrap"><canvas id="roundStartTimelineChart" role="img" aria-label="시작일별 수익률과 종가 MDD 흐름 차트"></canvas><div class="chart-tooltip hidden" id="roundStartTimelineTooltip"></div></div>
+                <p class="round-chart-detail" id="roundStartTimelineDetail">각 점은 하나의 독립 시작일 결과입니다.</p>
+              </article>
+              <article class="panel round-start-chart-panel">
+                <div class="panel-head">
+                  <div><h3>위험 대비 수익 분포</h3><p>왼쪽일수록 낙폭이 크고, 위쪽일수록 수익률이 높습니다.</p></div>
+                  <div class="round-chart-legend"><span class="completed-return">완료</span><span class="incomplete-return">미종료</span><span class="reverse-ring">리버스 진입</span></div>
+                </div>
+                <div class="round-chart-wrap"><canvas id="roundStartScatterChart" role="img" aria-label="시작일별 종가 MDD 대비 수익률 분포 차트"></canvas><div class="chart-tooltip hidden" id="roundStartScatterTooltip"></div></div>
+                <p class="round-chart-detail" id="roundStartScatterDetail">점의 테두리는 리버스모드 진입 여부를 표시합니다.</p>
+              </article>
+            </div>
             <div class="table-toolbar round-table-toolbar">
               <div><h2>시작 거래일별 결과</h2><p>완료 수익률과 기간은 전량매도 시점, 미종료 수익률은 설정 종료일 종가 평가 기준입니다.</p></div>
               <div class="table-filters">

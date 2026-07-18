@@ -122,6 +122,9 @@ class RoundResult:
     total_sell_amount: Decimal
     total_fees: Decimal
     ending_t_value: Decimal
+    close_mdd: Decimal = ZERO
+    mdd_peak_date: str | None = None
+    mdd_trough_date: str | None = None
 
 
 @dataclass

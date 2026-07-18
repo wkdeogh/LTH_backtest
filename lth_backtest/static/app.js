@@ -8,6 +8,8 @@ const app = {
   randomResult: null,
   roundStartResult: null,
   roundStartLimit: 200,
+  roundStartTimelineHover: null,
+  roundStartScatterHover: null,
   candleEnd: 0,
   candleHoverIndex: null,
   dateRangeDates: [],
@@ -218,6 +220,7 @@ function activateTab(name) {
   $$(".tab-page").forEach(page => page.classList.toggle("active", page.id === `tab-${name}`));
   if (name === "overview" && app.result) requestAnimationFrame(renderCharts);
   if (name === "candles" && app.result) requestAnimationFrame(drawCandlestick);
+  if (name === "round-starts" && app.roundStartResult) requestAnimationFrame(drawRoundStartCharts);
 }
 
 function summaryCard(label, value, detail = "", valueClass = "") {
@@ -299,7 +302,7 @@ function renderExecutions() {
 
 function renderRounds() {
   const rows = app.result?.rounds || [];
-  $("#roundRows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.round_number}</td><td>${item.started_at}</td><td>${item.ended_at}</td><td>${item.trading_days}</td><td>${money(item.allocation_principal)}</td><td>${money(item.starting_equity)}</td><td>${money(item.ending_equity)}</td><td class="${cls(item.profit_amount)}">${money(item.profit_amount)}</td><td class="${cls(item.profit_rate)}">${percent(item.profit_rate, 3, true)}</td><td>${item.execution_count}</td><td>${money(item.total_fees)}</td></tr>`).join("") : `<tr><td colspan="11">완료된 라운드가 없습니다.</td></tr>`;
+  $("#roundRows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.round_number}</td><td>${item.started_at}</td><td>${item.ended_at}</td><td>${item.trading_days}</td><td>${money(item.allocation_principal)}</td><td>${money(item.starting_equity)}</td><td>${money(item.ending_equity)}</td><td class="${cls(item.profit_amount)}">${money(item.profit_amount)}</td><td class="${cls(item.profit_rate)}">${percent(item.profit_rate, 3, true)}</td><td class="negative"><strong>${percent(item.close_mdd, 2)}</strong><small class="cell-sub">${item.mdd_peak_date} → ${item.mdd_trough_date}</small></td><td>${item.execution_count}</td><td>${money(item.total_fees)}</td></tr>`).join("") : `<tr><td colspan="12">완료된 라운드가 없습니다.</td></tr>`;
 }
 
 function renderRoundStartRows() {
@@ -343,6 +346,8 @@ function renderRoundStartRows() {
 function renderRoundStartAnalysis(result) {
   app.roundStartResult = result;
   app.roundStartLimit = 200;
+  app.roundStartTimelineHover = null;
+  app.roundStartScatterHover = null;
   const summary = result.summary;
   $("#roundStartCount").textContent = summary.sample_count.toLocaleString();
   $("#roundStartEmpty").classList.add("hidden");
@@ -362,6 +367,179 @@ function renderRoundStartAnalysis(result) {
   ].join("");
   $("#roundStartNote").textContent = `각 표본은 시작일 종가에 첫 1회분을 MOC 매수합니다. 미종료 ${summary.incomplete_count.toLocaleString()}개는 ${result.period.end} 종가 평가이며 완료 수익률·기간 평균에서 제외했습니다. MDD는 일별 종가 평가자산 기준입니다.`;
   renderRoundStartRows();
+  requestAnimationFrame(drawRoundStartCharts);
+}
+
+function roundChartColors() {
+  const styles = getComputedStyle(document.documentElement);
+  const color = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+  return {
+    brand: color("--brand", "#08775b"),
+    amber: color("--amber", "#9a6300"),
+    red: color("--red", "#c43e45"),
+    blue: color("--blue", "#2865d5"),
+    line: color("--line", "#dce4df"),
+    muted: color("--muted", "#64716a"),
+    ink: color("--ink", "#14231c"),
+  };
+}
+
+function orderedRoundStartRows() {
+  return [...(app.roundStartResult?.rows || [])].sort((a, b) => a.start_date.localeCompare(b.start_date));
+}
+
+function drawRoundStartTimelineChart() {
+  const canvas = $("#roundStartTimelineChart");
+  const rows = orderedRoundStartRows();
+  if (!canvas || !rows.length || !canvas.offsetParent) return;
+  const { context: ctx, width, height } = fitCanvas(canvas);
+  const colors = roundChartColors();
+  const padding = { left: 55, right: 15, top: 15, bottom: 28 };
+  const values = rows.flatMap(item => [Number(item.profit_rate), Number(item.close_mdd)]).filter(Number.isFinite);
+  let low = Math.min(0, ...values), high = Math.max(0, ...values);
+  let range = Math.max(high - low, 1);
+  low -= range * .08; high += range * .08; range = high - low;
+  const pointX = index => padding.left + (width - padding.left - padding.right) * index / Math.max(rows.length - 1, 1);
+  const pointY = value => padding.top + (high - Number(value)) / range * (height - padding.top - padding.bottom);
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.textBaseline = "middle";
+  for (let index = 0; index < 5; index++) {
+    const ratio = index / 4, value = high - range * ratio;
+    const y = padding.top + (height - padding.top - padding.bottom) * ratio;
+    ctx.strokeStyle = colors.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(width - padding.right, y); ctx.stroke();
+    ctx.fillStyle = colors.muted; ctx.textAlign = "right"; ctx.fillText(`${number(value, 1)}%`, padding.left - 7, y);
+  }
+  if (low < 0 && high > 0) {
+    const zeroY = pointY(0);
+    ctx.strokeStyle = colors.ink; ctx.globalAlpha = .32; ctx.beginPath(); ctx.moveTo(padding.left, zeroY); ctx.lineTo(width - padding.right, zeroY); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  const drawLine = (key, stroke, alpha, widthValue) => {
+    ctx.strokeStyle = stroke; ctx.globalAlpha = alpha; ctx.lineWidth = widthValue; ctx.lineJoin = "round"; ctx.beginPath();
+    rows.forEach((item, index) => { const x = pointX(index), y = pointY(item[key]); index ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke(); ctx.globalAlpha = 1;
+  };
+  drawLine("profit_rate", colors.brand, .35, 1);
+  drawLine("close_mdd", colors.red, .9, 1.5);
+
+  const radius = rows.length > 700 ? 1 : rows.length > 250 ? 1.5 : 2.25;
+  rows.forEach((item, index) => {
+    const x = pointX(index), y = pointY(item.profit_rate);
+    ctx.fillStyle = item.completed ? colors.brand : colors.amber;
+    ctx.globalAlpha = rows.length > 700 ? .68 : .82;
+    if (item.completed) { ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); }
+    else ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  });
+  ctx.globalAlpha = 1;
+
+  const tickCount = Math.min(4, rows.length);
+  for (let index = 0; index < tickCount; index++) {
+    const rowIndex = tickCount === 1 ? 0 : Math.round((rows.length - 1) * index / (tickCount - 1));
+    ctx.fillStyle = colors.muted; ctx.textBaseline = "bottom";
+    ctx.textAlign = index === 0 ? "left" : index === tickCount - 1 ? "right" : "center";
+    ctx.fillText(rows[rowIndex].start_date, pointX(rowIndex), height - 3);
+  }
+
+  if (app.roundStartTimelineHover != null) {
+    const index = Math.max(0, Math.min(rows.length - 1, app.roundStartTimelineHover));
+    const x = pointX(index), profitY = pointY(rows[index].profit_rate), mddY = pointY(rows[index].close_mdd);
+    ctx.strokeStyle = colors.ink; ctx.globalAlpha = .45; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, padding.top); ctx.lineTo(x, height - padding.bottom); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    [[profitY, rows[index].completed ? colors.brand : colors.amber], [mddY, colors.red]].forEach(([y, color]) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = colors.ink; ctx.lineWidth = 1; ctx.stroke(); });
+  } else {
+    const summary = app.roundStartResult.summary;
+    $("#roundStartTimelineDetail").textContent = `${rows.length.toLocaleString()}개 시작일 · 완료 ${summary.completed_count.toLocaleString()}개 · 평균 MDD ${percent(summary.avg_close_mdd_all, 2)}`;
+  }
+  canvas._roundTimeline = { rows, padding, pointX, pointY, width, height };
+}
+
+function drawRoundStartScatterChart() {
+  const canvas = $("#roundStartScatterChart");
+  const rows = orderedRoundStartRows();
+  if (!canvas || !rows.length || !canvas.offsetParent) return;
+  const { context: ctx, width, height } = fitCanvas(canvas);
+  const colors = roundChartColors();
+  const padding = { left: 55, right: 15, top: 19, bottom: 32 };
+  const mdds = rows.map(item => Number(item.close_mdd));
+  const profits = rows.map(item => Number(item.profit_rate));
+  let xLow = Math.min(-1, ...mdds), xHigh = 0;
+  let xRange = Math.max(xHigh - xLow, 1); xLow -= xRange * .06; xRange = xHigh - xLow;
+  let yLow = Math.min(0, ...profits), yHigh = Math.max(0, ...profits);
+  let yRange = Math.max(yHigh - yLow, 1); yLow -= yRange * .08; yHigh += yRange * .08; yRange = yHigh - yLow;
+  const pointX = value => padding.left + (Number(value) - xLow) / xRange * (width - padding.left - padding.right);
+  const pointY = value => padding.top + (yHigh - Number(value)) / yRange * (height - padding.top - padding.bottom);
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = "10px -apple-system, sans-serif"; ctx.textBaseline = "middle";
+  for (let index = 0; index < 5; index++) {
+    const ratio = index / 4;
+    const yValue = yHigh - yRange * ratio, y = padding.top + (height - padding.top - padding.bottom) * ratio;
+    ctx.strokeStyle = colors.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(width - padding.right, y); ctx.stroke();
+    ctx.fillStyle = colors.muted; ctx.textAlign = "right"; ctx.fillText(`${number(yValue, 1)}%`, padding.left - 7, y);
+    const xValue = xLow + xRange * ratio, x = padding.left + (width - padding.left - padding.right) * ratio;
+    ctx.textAlign = index === 0 ? "left" : index === 4 ? "right" : "center"; ctx.textBaseline = "bottom"; ctx.fillText(`${number(xValue, 1)}%`, x, height - 3); ctx.textBaseline = "middle";
+  }
+  ctx.fillStyle = colors.muted; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("수익률", padding.left, 2);
+  ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText("종가 MDD", width - padding.right, height - 15);
+
+  const radius = rows.length > 700 ? 1.5 : rows.length > 250 ? 2 : 2.6;
+  const coordinates = rows.map((item, index) => ({ item, index, x: pointX(item.close_mdd), y: pointY(item.profit_rate) }));
+  coordinates.forEach(({ item, x, y }) => {
+    ctx.fillStyle = item.completed ? colors.brand : colors.amber; ctx.globalAlpha = rows.length > 700 ? .42 : .62;
+    if (item.completed) { ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); }
+    else ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    if (item.reverse_entered) { ctx.globalAlpha = .72; ctx.strokeStyle = colors.blue; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, radius + 2, 0, Math.PI * 2); ctx.stroke(); }
+  });
+  ctx.globalAlpha = 1;
+  if (app.roundStartScatterHover != null) {
+    const selected = coordinates.find(point => point.index === app.roundStartScatterHover);
+    if (selected) { ctx.strokeStyle = colors.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(selected.x, selected.y, radius + 4, 0, Math.PI * 2); ctx.stroke(); }
+  } else {
+    const summary = app.roundStartResult.summary;
+    $("#roundStartScatterDetail").textContent = `리버스 진입 ${summary.reverse_sample_count.toLocaleString()}개 (${percent(summary.reverse_entry_rate, 1)}) · 최악 MDD ${percent(summary.worst_close_mdd_all, 2)}`;
+  }
+  canvas._roundScatter = { rows, coordinates, padding, width, height };
+}
+
+function drawRoundStartCharts() {
+  drawRoundStartTimelineChart();
+  drawRoundStartScatterChart();
+}
+
+function roundStartTooltipHtml(item) {
+  const observed = item.completed ? item.end_date : item.last_observed_at;
+  return `<strong>${item.start_date} 시작 · ${item.completed ? "완료" : "미종료"}</strong><div class="tooltip-grid"><span>종료 / 관찰</span><span>${observed}</span><span>수익률</span><span>${percent(item.profit_rate, 3, true)}</span><span>종가 MDD</span><span>${percent(item.close_mdd, 2)}</span><span>기간</span><span>${item.calendar_days.toLocaleString()}일</span><span>최대 T</span><span>${number(item.max_t_value, 3)}</span><span>리버스</span><span>${item.reverse_entered ? "진입" : "없음"}</span></div>`;
+}
+
+function showRoundStartTimelineTooltip(event) {
+  const canvas = event.currentTarget, info = canvas._roundTimeline;
+  if (!info?.rows.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const localX = event.clientX - rect.left;
+  const ratio = Math.max(0, Math.min(1, (localX - info.padding.left) / Math.max(info.width - info.padding.left - info.padding.right, 1)));
+  const index = Math.round(ratio * Math.max(info.rows.length - 1, 0));
+  if (app.roundStartTimelineHover !== index) { app.roundStartTimelineHover = index; drawRoundStartTimelineChart(); }
+  const item = info.rows[index], x = info.pointX(index), y = info.pointY(item.profit_rate);
+  const tip = $("#roundStartTimelineTooltip"); tip.innerHTML = roundStartTooltipHtml(item);
+  tip.style.left = `${Math.max(6, Math.min(x + 12, rect.width - 225))}px`; tip.style.top = `${Math.max(6, Math.min(y - 55, rect.height - 155))}px`; tip.classList.remove("hidden");
+  $("#roundStartTimelineDetail").textContent = `${item.start_date} 시작 · 수익률 ${percent(item.profit_rate, 3, true)} · MDD ${percent(item.close_mdd, 2)} · ${item.calendar_days.toLocaleString()}일`;
+}
+
+function showRoundStartScatterTooltip(event) {
+  const canvas = event.currentTarget, info = canvas._roundScatter;
+  if (!info?.coordinates.length) return;
+  const rect = canvas.getBoundingClientRect(), localX = event.clientX - rect.left, localY = event.clientY - rect.top;
+  let selected = null, distance = Infinity;
+  info.coordinates.forEach(point => { const next = (point.x - localX) ** 2 + (point.y - localY) ** 2; if (next < distance) { selected = point; distance = next; } });
+  if (!selected || distance > 225) {
+    $("#roundStartScatterTooltip").classList.add("hidden");
+    if (app.roundStartScatterHover != null) { app.roundStartScatterHover = null; drawRoundStartScatterChart(); }
+    return;
+  }
+  if (app.roundStartScatterHover !== selected.index) { app.roundStartScatterHover = selected.index; drawRoundStartScatterChart(); }
+  const tip = $("#roundStartScatterTooltip"); tip.innerHTML = roundStartTooltipHtml(selected.item);
+  tip.style.left = `${Math.max(6, Math.min(selected.x + 12, rect.width - 225))}px`; tip.style.top = `${Math.max(6, Math.min(selected.y - 55, rect.height - 155))}px`; tip.classList.remove("hidden");
+  $("#roundStartScatterDetail").textContent = `${selected.item.start_date} · MDD ${percent(selected.item.close_mdd, 2)} → 수익률 ${percent(selected.item.profit_rate, 3, true)}${selected.item.reverse_entered ? " · 리버스 진입" : ""}`;
 }
 
 function renderPeriods() {
@@ -523,7 +701,7 @@ function drawCandlestick() {
   canvas._candles = { ...windowData, slot, padding, plotWidth, width, height };
 }
 
-function renderCharts() { drawEquity(); drawDrawdown(); drawCandlestick(); }
+function renderCharts() { drawEquity(); drawDrawdown(); drawCandlestick(); drawRoundStartCharts(); }
 
 function renderAll(result) {
   app.result = result;
@@ -701,5 +879,9 @@ $("#equityChart").addEventListener("mousemove", event => {
 $("#equityChart").addEventListener("mouseleave", () => $("#equityTooltip").classList.add("hidden"));
 $("#candlestickChart").addEventListener("pointermove", showCandleTooltip);
 $("#candlestickChart").addEventListener("pointerleave", () => { app.candleHoverIndex = null; $("#candleTooltip").classList.add("hidden"); drawCandlestick(); });
+$("#roundStartTimelineChart").addEventListener("pointermove", showRoundStartTimelineTooltip);
+$("#roundStartTimelineChart").addEventListener("pointerleave", () => { app.roundStartTimelineHover = null; $("#roundStartTimelineTooltip").classList.add("hidden"); drawRoundStartTimelineChart(); });
+$("#roundStartScatterChart").addEventListener("pointermove", showRoundStartScatterTooltip);
+$("#roundStartScatterChart").addEventListener("pointerleave", () => { app.roundStartScatterHover = null; $("#roundStartScatterTooltip").classList.add("hidden"); drawRoundStartScatterChart(); });
 
 init();
