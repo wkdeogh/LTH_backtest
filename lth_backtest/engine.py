@@ -52,8 +52,8 @@ class Simulator:
         data_diagnostics: dict | None = None,
         benchmark_prices: list[PriceBar] | None = None,
     ):
-        if len(prices) < 2:
-            raise ValueError("백테스트에는 최소 2거래일이 필요합니다.")
+        if not prices:
+            raise ValueError("백테스트에는 최소 1거래일이 필요합니다.")
         self.config = config
         self.prices = prices
         self.benchmark_prices = benchmark_prices or []
@@ -86,6 +86,8 @@ class Simulator:
             self.warnings.append("종가 전용 체결 모델입니다. 장중 고가가 최종 매도가를 통과한 체결을 누락할 수 있습니다.")
         if any((config.slippage_bps, config.commission, config.sell_fee_bps)):
             self.warnings.append("수수료/슬리피지는 사용자 입력 가정이며 실제 증권사 체결 비용과 다를 수 있습니다.")
+        if self.diagnostics.get("price_basis") == "actual_split_adjusted":
+            self.warnings.append("매매 가격은 분할 반영·배당 미보정 실제 OHLC입니다. ETF 현금 분배금은 전략 자산에 별도로 가산하지 않습니다.")
 
     def _next_fill_price(self, side: str, base_price: Decimal, limit_price: Decimal | None = None) -> Decimal:
         slip = self.config.slippage_bps / Decimal("10000")
@@ -363,9 +365,11 @@ class Simulator:
         benchmark_equity = round_money(self.config.principal * day.close / start_close)
         point = {
             "date": day.date,
+            "open": day.open,
             "close": day.close,
             "high": day.high,
             "low": day.low,
+            "volume": day.volume,
             "equity": equity,
             "benchmark_equity": benchmark_equity,
             "cash_balance": self.state.cash_balance,
@@ -379,7 +383,9 @@ class Simulator:
             point["qld_benchmark_equity"] = round_money(self.config.principal * self._benchmark_last / self._benchmark_start)
         self.equity_curve.append(point)
 
-    def run(self) -> BacktestResult:
+    def run(self, stop_after_completed_rounds: int | None = None) -> BacktestResult:
+        if stop_after_completed_rounds is not None and stop_after_completed_rounds <= 0:
+            raise ValueError("종료할 라운드 수는 1 이상이어야 합니다.")
         first_day = self.prices[0]
         if not self._start_round(first_day, None, force_moc=True):
             raise ValueError("원금이 너무 작아 첫 거래일에 1주도 매수할 수 없습니다.")
@@ -397,6 +403,8 @@ class Simulator:
                     previous_closes = [item.close for item in self.prices[max(0, index - 5):index]]
                     self._process_reverse_day(day, previous_closes)
             self._append_equity(day)
+            if stop_after_completed_rounds is not None and len(self.rounds) >= stop_after_completed_rounds:
+                break
 
         metrics, monthly_returns, yearly_returns = calculate_metrics(
             self.equity_curve,
@@ -413,7 +421,7 @@ class Simulator:
         qld_ending = decimal(self.equity_curve[-1].get("qld_benchmark_equity")) if self._benchmark_start else None
         qld_rate = round_rate(((qld_ending / self.config.principal) - ONE) * Decimal("100")) if qld_ending is not None else None
         first_date = datetime.strptime(self.prices[0].date, "%Y-%m-%d")
-        last_date = datetime.strptime(self.prices[-1].date, "%Y-%m-%d")
+        last_date = datetime.strptime(self.equity_curve[-1]["date"], "%Y-%m-%d")
 
         if self.diagnostics["intraday_high_only_fills"]:
             count = self.diagnostics["intraday_high_only_fills"]
@@ -445,8 +453,8 @@ class Simulator:
             },
             period={
                 "start": self.prices[0].date,
-                "end": self.prices[-1].date,
-                "trading_days": len(self.prices),
+                "end": self.equity_curve[-1]["date"],
+                "trading_days": len(self.equity_curve),
                 "calendar_days": (last_date - first_date).days + 1,
             },
             summary={
@@ -462,7 +470,7 @@ class Simulator:
                 "execution_count": len(self.executions),
                 "open_position_qty": self.state.position_qty,
                 "cash_balance": self.state.cash_balance,
-                "open_position_market_value": round_money(self.state.position_qty * self.prices[-1].close),
+                "open_position_market_value": round_money(self.state.position_qty * decimal(self.equity_curve[-1]["close"])),
             },
             metrics=metrics,
             state={
@@ -490,5 +498,6 @@ def run_backtest(
     prices: list[PriceBar],
     data_diagnostics: dict | None = None,
     benchmark_prices: list[PriceBar] | None = None,
+    stop_after_completed_rounds: int | None = None,
 ) -> BacktestResult:
-    return Simulator(config, prices, data_diagnostics, benchmark_prices).run()
+    return Simulator(config, prices, data_diagnostics, benchmark_prices).run(stop_after_completed_rounds)

@@ -13,7 +13,7 @@
       <div class="brand-mark">V2</div>
       <div class="brand-copy">
         <h1>BackTest <span>version2</span></h1>
-        <p>무한매수법 V4 · 조정 OHLC 정밀 시뮬레이터</p>
+        <p>무한매수법 V4 · 실제 거래 OHLC 정밀 시뮬레이터</p>
       </div>
       <div class="top-actions">
         <span class="status-dot" id="serverStatus">연결 확인 중</span>
@@ -34,11 +34,11 @@
           <section class="form-section">
             <h3>전략</h3>
             <div class="segmented" role="radiogroup" aria-label="종목">
-              <label><input type="radio" name="symbol" value="TQQQ" checked><span>TQQQ</span></label>
-              <label><input type="radio" name="symbol" value="SOXL"><span>SOXL</span></label>
+              <label><input type="radio" name="symbol" value="TQQQ"><span>TQQQ</span></label>
+              <label><input type="radio" name="symbol" value="SOXL" checked><span>SOXL</span></label>
             </div>
             <div class="field-grid two">
-              <label class="field"><span>분할 수</span><select name="split_count"><option value="40">40분할</option><option value="20">20분할</option><option value="30">30분할 · 실험</option></select></label>
+              <label class="field"><span>분할 수</span><select name="split_count"><option value="20" selected>20분할</option><option value="40">40분할</option><option value="30">30분할 · 실험</option></select></label>
               <label class="field"><span>운용 방식</span><select name="compounding_type"><option value="compound">복리</option><option value="simple">단리</option></select></label>
             </div>
             <label class="field"><span>시작 원금 ($)</span><input name="principal" type="number" min="1" step="0.01" value="20000" required></label>
@@ -46,14 +46,27 @@
           </section>
 
           <section class="form-section">
-            <h3>데이터</h3>
-            <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="BackTest/data/TQQQ.csv" required><datalist id="csvOptions"></datalist></label>
+            <h3>가격 데이터</h3>
+            <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="data/SOXL.csv" required><datalist id="csvOptions"></datalist></label>
+            <p class="field-help" id="datasetInfo">분할만 반영하고 배당은 소급 보정하지 않은 실제 OHLC를 사용합니다.</p>
+          </section>
+
+          <section class="form-section">
+            <h3>분석 기간</h3>
             <div class="field-grid two">
-              <label class="field"><span>시작일</span><input name="start_date" type="date" value="2020-01-01" required></label>
-              <label class="field"><span>종료일</span><input name="end_date" type="date" required></label>
+              <label class="field"><span>시작일</span><input name="start_date" id="startDate" type="date" value="2020-01-01" required></label>
+              <label class="field"><span>종료일</span><input name="end_date" id="endDate" type="date" required></label>
             </div>
-            <button type="button" class="button secondary full" id="refreshPrices">선택 종목 최신 데이터 받기</button>
-            <p class="field-help" id="datasetInfo">OHLC 데이터의 고가로 장중 지정가 체결을 확인합니다.</p>
+            <div class="date-range-control" id="dateRangeControl">
+              <div class="date-range-head"><span>전체 거래일 범위</span><strong id="dateRangeBounds">불러오는 중</strong></div>
+              <div class="dual-range" id="dualDateRange">
+                <div class="range-rail"><div class="range-selected" id="dateRangeSelected"></div></div>
+                <input id="dateRangeStart" type="range" min="0" max="1" value="0" aria-label="분석 시작 거래일">
+                <input id="dateRangeEnd" type="range" min="0" max="1" value="1" aria-label="분석 종료 거래일">
+              </div>
+              <div class="date-range-values"><output id="dateRangeStartLabel">-</output><span id="dateRangeTradingDays">-</span><output id="dateRangeEndLabel">-</output></div>
+            </div>
+            <p class="field-help">슬라이더는 실제 거래일 단위로 움직이며 일반 백테스트와 시작일별 1라운드 분석에 함께 적용됩니다.</p>
           </section>
 
           <details class="form-section advanced">
@@ -76,13 +89,24 @@
 
           <button class="button primary run-button" type="submit"><span>백테스트 실행</span><kbd>⌘ ↵</kbd></button>
         </form>
+
+        <section class="market-data-manager" aria-labelledby="marketDataTitle">
+          <div class="market-data-head">
+            <div><span class="eyebrow">MARKET DATA</span><h2 id="marketDataTitle">전체 가격 데이터</h2></div>
+            <span class="data-scope">3종목</span>
+          </div>
+          <p>TQQQ · SOXL · QLD의 분할 반영·배당 미보정 실제 거래가격을 오늘까지 갱신합니다.</p>
+          <button type="button" class="button secondary full" id="refreshPrices">전체 데이터 갱신</button>
+        </section>
       </aside>
 
       <section class="results-panel">
         <nav class="tabs" aria-label="결과 화면">
           <button class="tab active" data-tab="overview">대시보드</button>
+          <button class="tab" data-tab="candles">캔들 차트</button>
           <button class="tab" data-tab="executions">체결 내역 <span id="executionCount"></span></button>
           <button class="tab" data-tab="rounds">라운드 <span id="roundCount"></span></button>
+          <button class="tab" data-tab="round-starts">시작일별 1라운드 <span id="roundStartCount"></span></button>
           <button class="tab" data-tab="periods">기간별 수익</button>
           <button class="tab" data-tab="random">랜덤 비교</button>
         </nav>
@@ -95,7 +119,7 @@
             <div class="empty-visual"><span></span><span></span><span></span><span></span><span></span></div>
             <h2>조건을 정하고 백테스트를 실행하세요</h2>
             <p>장중 고가 최종매도, LOC 종가 체결, 리버스모드, 단리·복리와 거래비용을 한 번에 분석합니다.</p>
-            <div class="assumption-strip"><span>가격</span><strong>조정 OHLC</strong><i></i><span>주문가</span><strong>소수 2자리</strong><i></i><span>T값</span><strong>소수 10자리</strong></div>
+            <div class="assumption-strip"><span>가격</span><strong>실제 OHLC</strong><i></i><span>주문가</span><strong>소수 2자리</strong><i></i><span>T값</span><strong>소수 10자리</strong></div>
           </div>
 
           <div class="results-content hidden" id="resultsContent">
@@ -130,6 +154,28 @@
           </div>
         </section>
 
+        <section class="tab-page" id="tab-candles">
+          <div class="empty-mini" id="candleEmpty">백테스트를 실행하면 선택 기간의 실제 OHLC 캔들과 거래량을 확인할 수 있습니다.</div>
+          <div class="hidden" id="candleContent">
+            <div class="candle-heading">
+              <div><span class="eyebrow">ACTUAL OHLCV</span><h2 id="candleTitle">캔들 차트</h2><p>분할은 반영하지만 배당은 소급 보정하지 않은 실제 시가, 고가, 저가, 종가입니다.</p></div>
+              <div class="candle-controls" aria-label="캔들 표시 범위">
+                <button class="button secondary" id="candlePrev" type="button" aria-label="이전 구간">← 이전</button>
+                <label><span>표시 구간</span><select id="candleRange"><option value="60">60거래일</option><option value="120" selected>120거래일</option><option value="252">252거래일</option><option value="0">전체 기간</option></select></label>
+                <button class="button secondary" id="candleNext" type="button" aria-label="다음 구간">다음 →</button>
+              </div>
+            </div>
+            <article class="panel candle-panel">
+              <div class="panel-head candle-panel-head">
+                <div><h3 id="candleWindowInfo">-</h3><p>몸통은 시가↔종가, 얇은 꼬리는 저가↔고가를 표시합니다.</p></div>
+                <div class="candle-legend"><span class="candle-up">상승 · 빨강</span><span class="candle-down">하락 · 파랑</span><span class="candle-volume">거래량</span></div>
+              </div>
+              <div class="canvas-wrap candle"><canvas id="candlestickChart" role="img" aria-label="선택 기간 OHLC 캔들 차트"></canvas><div class="chart-tooltip candle-tooltip hidden" id="candleTooltip"></div></div>
+            </article>
+            <div class="analysis-note">가격축과 캔들은 증권사 가격 차트와 비교 가능한 분할 반영·배당 미보정 OHLC 기준입니다. 종가가 시가보다 높으면 빨강, 낮으면 파랑으로 표시합니다. 거래량은 CSV의 일별 원자료이며, 긴 기간의 `전체 기간` 보기는 흐름 확인용이므로 세부 캔들은 60·120·252거래일 보기로 확인하세요.</div>
+          </div>
+        </section>
+
         <section class="tab-page" id="tab-executions">
           <div class="table-toolbar"><div><h2>체결 내역</h2><p>모든 현금·수량·T값 변화를 추적합니다.</p></div><div class="table-filters"><input id="executionSearch" type="search" placeholder="날짜·라벨 검색"><select id="executionSide"><option value="">전체 매매</option><option value="buy">매수</option><option value="sell">매도</option></select></div></div>
           <div class="data-table"><table><thead><tr><th>#</th><th>날짜</th><th>모드</th><th>매매</th><th>주문</th><th>구분</th><th>주문가</th><th>체결가</th><th>수량</th><th>거래금액</th><th>비용</th><th>T 전</th><th>T 후</th></tr></thead><tbody id="executionRows"></tbody></table></div>
@@ -139,6 +185,37 @@
         <section class="tab-page" id="tab-rounds">
           <div class="table-toolbar"><div><h2>완료 라운드</h2><p>단리는 운용원금과 실제 라운드 시작자산을 구분합니다.</p></div></div>
           <div class="data-table"><table><thead><tr><th>회차</th><th>시작</th><th>종료</th><th>거래일</th><th>운용원금</th><th>시작자산</th><th>종료자산</th><th>손익</th><th>수익률</th><th>체결</th><th>비용</th></tr></thead><tbody id="roundRows"></tbody></table></div>
+        </section>
+
+        <section class="tab-page" id="tab-round-starts">
+          <div class="round-analysis-intro">
+            <div>
+              <span class="eyebrow">ONE ROUND FROM EVERY START</span>
+              <h2>모든 시작일 기준 1라운드 분석</h2>
+              <p>설정 기간의 각 거래일에 첫 매수를 시작하고, 첫 전량매도일까지 독립적으로 계산합니다. 기간 안에 끝나지 않은 표본은 종료일 종가 평가로 구분합니다.</p>
+            </div>
+            <div class="round-analysis-actions">
+              <button class="button secondary" id="downloadRoundStartsJson" type="button" disabled>요약·결과 JSON</button>
+              <button class="button secondary" id="downloadRoundStartsCsv" type="button" disabled>전체 결과 CSV</button>
+              <button class="button primary" id="runRoundStarts" type="button">모든 시작일 분석 실행</button>
+            </div>
+          </div>
+          <div class="empty-mini" id="roundStartEmpty">왼쪽의 종목·분할·원금·기간·비용 설정을 사용합니다.<br>실행하면 각 거래일을 첫 매수일로 한 독립 1라운드 결과가 표시됩니다.</div>
+          <div class="hidden" id="roundStartResults">
+            <div class="summary-grid round-analysis-summary" id="roundStartSummary"></div>
+            <div class="analysis-note" id="roundStartNote"></div>
+            <div class="table-toolbar round-table-toolbar">
+              <div><h2>시작 거래일별 결과</h2><p>완료 수익률과 기간은 전량매도 시점, 미종료 수익률은 설정 종료일 종가 평가 기준입니다.</p></div>
+              <div class="table-filters">
+                <input id="roundStartSearch" type="search" placeholder="시작일·종료일 검색">
+                <select id="roundStartStatus"><option value="">전체 상태</option><option value="completed">완료</option><option value="incomplete">미종료</option></select>
+                <select id="roundStartReverse"><option value="">리버스 전체</option><option value="yes">리버스 진입</option><option value="no">리버스 없음</option></select>
+                <select id="roundStartSort"><option value="start-asc">시작일 빠른순</option><option value="start-desc">시작일 최신순</option><option value="profit-desc">수익률 높은순</option><option value="profit-asc">수익률 낮은순</option><option value="mdd-asc">MDD 큰순</option><option value="duration-desc">기간 긴순</option><option value="t-desc">최대 T 높은순</option></select>
+              </div>
+            </div>
+            <div class="data-table round-start-table"><table><thead><tr><th>시작일</th><th>상태</th><th>종료일 / 관찰일</th><th>달력일</th><th>거래일</th><th>수익률</th><th>손익</th><th>종가 MDD</th><th>최대 T</th><th>종료 T</th><th>리버스 진입 / 복귀</th><th>매수</th><th>매도</th><th>총 체결</th><th>고가 전용 체결</th><th>최대 보유</th><th>종료 보유</th><th>비용</th></tr></thead><tbody id="roundStartRows"></tbody></table></div>
+            <button class="button secondary load-more hidden" id="roundStartMore">200건 더 보기</button>
+          </div>
         </section>
 
         <section class="tab-page" id="tab-periods">
