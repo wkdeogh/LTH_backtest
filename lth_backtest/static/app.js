@@ -6,6 +6,8 @@ const app = {
   executionLimit: 100,
   chartPoints: [],
   randomResult: null,
+  roundStartResult: null,
+  roundStartLimit: 200,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -40,6 +42,7 @@ function setLoading(active, message = "정밀 계산 중입니다") {
   $("#loading strong").textContent = message;
   $("#loading").classList.toggle("hidden", !active);
   $("#backtestForm button[type=submit]").disabled = active;
+  $("#runRoundStarts").disabled = active;
 }
 
 function selectedSymbol() {
@@ -181,6 +184,68 @@ function renderRounds() {
   $("#roundRows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.round_number}</td><td>${item.started_at}</td><td>${item.ended_at}</td><td>${item.trading_days}</td><td>${money(item.allocation_principal)}</td><td>${money(item.starting_equity)}</td><td>${money(item.ending_equity)}</td><td class="${cls(item.profit_amount)}">${money(item.profit_amount)}</td><td class="${cls(item.profit_rate)}">${percent(item.profit_rate, 3, true)}</td><td>${item.execution_count}</td><td>${money(item.total_fees)}</td></tr>`).join("") : `<tr><td colspan="11">완료된 라운드가 없습니다.</td></tr>`;
 }
 
+function renderRoundStartRows() {
+  const source = app.roundStartResult?.rows || [];
+  const query = $("#roundStartSearch").value.trim().toLowerCase();
+  const status = $("#roundStartStatus").value;
+  const reverse = $("#roundStartReverse").value;
+  const sort = $("#roundStartSort").value;
+  const filtered = source.filter(item => {
+    const matchesQuery = !query || `${item.start_date} ${item.end_date || ""} ${item.last_observed_at}`.toLowerCase().includes(query);
+    const matchesStatus = !status || item.status === status;
+    const matchesReverse = !reverse || (reverse === "yes" ? item.reverse_entered : !item.reverse_entered);
+    return matchesQuery && matchesStatus && matchesReverse;
+  });
+  const comparisons = {
+    "start-asc": (a, b) => a.start_date.localeCompare(b.start_date),
+    "start-desc": (a, b) => b.start_date.localeCompare(a.start_date),
+    "profit-desc": (a, b) => b.profit_rate - a.profit_rate,
+    "profit-asc": (a, b) => a.profit_rate - b.profit_rate,
+    "mdd-asc": (a, b) => a.close_mdd - b.close_mdd,
+    "duration-desc": (a, b) => b.calendar_days - a.calendar_days,
+    "t-desc": (a, b) => b.max_t_value - a.max_t_value,
+  };
+  filtered.sort(comparisons[sort] || comparisons["start-asc"]);
+  const shown = filtered.slice(0, app.roundStartLimit);
+  $("#roundStartRows").innerHTML = shown.length ? shown.map(item => {
+    const observedDate = item.completed ? item.end_date : item.last_observed_at;
+    const statusLabel = item.completed ? "완료" : "미종료";
+    const modeLabel = item.ending_mode === "reverse" ? "리버스" : "일반";
+    return `<tr>
+      <td>${item.start_date}</td><td><span class="status-pill ${item.status}">${statusLabel}</span></td><td>${observedDate}${item.completed ? "" : " *"}</td>
+      <td>${item.calendar_days.toLocaleString()}</td><td>${item.trading_days.toLocaleString()}</td><td class="${cls(item.profit_rate)}">${percent(item.profit_rate, 3, true)}${item.completed ? "" : " *"}</td>
+      <td class="${cls(item.profit_amount)}">${money(item.profit_amount)}</td><td class="negative">${percent(item.close_mdd, 2)}</td><td>${number(item.max_t_value, 4)}</td><td>${number(item.ending_t_value, 4)} · ${modeLabel}</td>
+      <td>${item.reverse_entries.toLocaleString()} / ${item.reverse_returns.toLocaleString()}</td><td>${item.buy_count.toLocaleString()}</td><td>${item.sell_count.toLocaleString()}</td><td>${item.execution_count.toLocaleString()}</td>
+      <td>${item.intraday_high_only_fills.toLocaleString()}</td><td>${item.max_position_qty.toLocaleString()}주</td><td>${item.ending_position_qty.toLocaleString()}주</td><td>${money(item.total_fees)}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="18">조건에 맞는 시작일 결과가 없습니다.</td></tr>`;
+  $("#roundStartMore").classList.toggle("hidden", shown.length >= filtered.length);
+}
+
+function renderRoundStartAnalysis(result) {
+  app.roundStartResult = result;
+  app.roundStartLimit = 200;
+  const summary = result.summary;
+  $("#roundStartCount").textContent = summary.sample_count.toLocaleString();
+  $("#roundStartEmpty").classList.add("hidden");
+  $("#roundStartResults").classList.remove("hidden");
+  $("#downloadRoundStartsJson").disabled = false;
+  $("#downloadRoundStartsCsv").disabled = false;
+  $("#roundStartSummary").innerHTML = [
+    summaryCard("분석 시작일", `${summary.sample_count.toLocaleString()}개`, `${result.period.start} — ${result.period.end}`),
+    summaryCard("라운드 완료", `${summary.completed_count.toLocaleString()}개`, `완료율 ${percent(summary.completion_rate, 1)} · 미종료 ${summary.incomplete_count.toLocaleString()}개`),
+    summaryCard("완료 평균 수익률", percent(summary.avg_profit_rate_completed, 3, true), `중앙값 ${percent(summary.median_profit_rate_completed, 3, true)}`, cls(summary.avg_profit_rate_completed)),
+    summaryCard("완료 수익률 범위", `${percent(summary.worst_profit_rate_completed, 2)} — ${percent(summary.best_profit_rate_completed, 2, true)}`, `수익 표본 ${percent(summary.completed_win_rate, 1)}`),
+    summaryCard("완료 평균 기간", `${number(summary.avg_calendar_days_completed, 1)}일`, `중앙값 ${number(summary.median_calendar_days_completed, 1)}일 · ${number(summary.avg_trading_days_completed, 1)}거래일`),
+    summaryCard("종가 MDD", percent(summary.avg_close_mdd_all, 2), `전체 평균 · 최악 ${percent(summary.worst_close_mdd_all, 2)}`, "negative"),
+    summaryCard("최대 T값", number(summary.avg_max_t_value_all, 3), `전체 평균 · 최고 ${number(summary.highest_max_t_value, 3)}`),
+    summaryCard("리버스 진입", `${summary.reverse_sample_count.toLocaleString()}개`, `전체 시작일의 ${percent(summary.reverse_entry_rate, 1)}`),
+    summaryCard("평균 체결 횟수", number(summary.avg_execution_count_all, 1), `매수 ${number(summary.avg_buy_count_all, 1)} · 매도 ${number(summary.avg_sell_count_all, 1)}`),
+  ].join("");
+  $("#roundStartNote").textContent = `각 표본은 시작일 종가에 첫 1회분을 MOC 매수합니다. 미종료 ${summary.incomplete_count.toLocaleString()}개는 ${result.period.end} 종가 평가이며 완료 수익률·기간 평균에서 제외했습니다. MDD는 일별 종가 평가자산 기준입니다.`;
+  renderRoundStartRows();
+}
+
 function renderPeriods() {
   const render = (selector, rows) => {
     $(selector).innerHTML = rows.length ? [...rows].reverse().map(item => `<tr><td>${item.period}</td><td>${money(item.ending_equity)}</td><td class="${cls(item.return_rate)}">${percent(item.return_rate, 3, true)}</td></tr>`).join("") : `<tr><td colspan="3">데이터 없음</td></tr>`;
@@ -263,6 +328,19 @@ async function runBacktest(event) {
   finally { setLoading(false); }
 }
 
+async function runRoundStarts() {
+  const payload = formPayload();
+  if (payload.start_date > payload.end_date) return toast("시작일이 종료일보다 늦습니다.", true);
+  setLoading(true, "모든 시작 거래일의 1라운드를 계산 중입니다");
+  try {
+    const result = await api("/api/round-starts", payload);
+    renderRoundStartAnalysis(result);
+    activateTab("round-starts");
+    toast(`${result.summary.sample_count.toLocaleString()}개 시작일 분석이 완료되었습니다.`);
+  } catch (error) { toast(error.message, true); }
+  finally { setLoading(false); }
+}
+
 function downloadBlob(content, type, filename) {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const anchor = Object.assign(document.createElement("a"), { href: url, download: filename });
@@ -326,6 +404,7 @@ async function init() {
 
 $("#backtestForm").addEventListener("submit", runBacktest);
 $("#randomForm").addEventListener("submit", runRandom);
+$("#runRoundStarts").addEventListener("click", runRoundStarts);
 $("#resetForm").addEventListener("click", resetForm);
 $("#refreshPrices").addEventListener("click", refreshPrices);
 $$("input[name=symbol]").forEach(input => input.addEventListener("change", () => refreshDatasetChoices(true)));
@@ -334,9 +413,16 @@ $$('.tab').forEach(button => button.addEventListener("click", () => activateTab(
 $("#executionSearch").addEventListener("input", () => { app.executionLimit = 100; renderExecutions(); });
 $("#executionSide").addEventListener("change", () => { app.executionLimit = 100; renderExecutions(); });
 $("#executionMore").addEventListener("click", () => { app.executionLimit += 100; renderExecutions(); });
+$("#roundStartSearch").addEventListener("input", () => { app.roundStartLimit = 200; renderRoundStartRows(); });
+$("#roundStartStatus").addEventListener("change", () => { app.roundStartLimit = 200; renderRoundStartRows(); });
+$("#roundStartReverse").addEventListener("change", () => { app.roundStartLimit = 200; renderRoundStartRows(); });
+$("#roundStartSort").addEventListener("change", () => { app.roundStartLimit = 200; renderRoundStartRows(); });
+$("#roundStartMore").addEventListener("click", () => { app.roundStartLimit += 200; renderRoundStartRows(); });
 $("#downloadJson").addEventListener("click", () => app.result && downloadBlob(JSON.stringify(app.result, null, 2), "application/json", `${app.result.config.symbol}-backtest-v2.json`));
 $("#downloadCsv").addEventListener("click", () => app.result && downloadBlob(csvText(app.result.executions), "text/csv;charset=utf-8", `${app.result.config.symbol}-executions.csv`));
 $("#downloadReport").addEventListener("click", downloadReport);
+$("#downloadRoundStartsJson").addEventListener("click", () => app.roundStartResult && downloadBlob(JSON.stringify(app.roundStartResult, null, 2), "application/json", `${app.roundStartResult.config.symbol}-round-start-analysis.json`));
+$("#downloadRoundStartsCsv").addEventListener("click", () => app.roundStartResult && downloadBlob(csvText(app.roundStartResult.rows), "text/csv;charset=utf-8", `${app.roundStartResult.config.symbol}-round-start-analysis.csv`));
 document.addEventListener("keydown", event => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") runBacktest(event); });
 window.addEventListener("resize", () => { clearTimeout(app.resizeTimer); app.resizeTimer = setTimeout(renderCharts, 100); });
 $("#equityChart").addEventListener("mousemove", event => {

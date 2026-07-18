@@ -18,6 +18,7 @@ from .models import BacktestConfig
 from .precision import decimal, to_primitive
 from .random_compare import run_random_comparison
 from .reporting import render_html_report
+from .round_analysis import run_round_start_analysis
 
 
 STATIC_ROOT = PACKAGE_ROOT / "static"
@@ -56,7 +57,7 @@ def _dataset_meta(path: Path) -> dict | None:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "BackTestV2/2.0"
+    server_version = "BackTestV2/2.1"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {format % args}")
@@ -115,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
                     item = _dataset_meta(path)
                     if item:
                         datasets.append(item)
-            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.0"})
+            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.1"})
             return
         self._serve_static(path_value)
 
@@ -165,6 +166,13 @@ class Handler(BaseHTTPRequestHandler):
                     commission=decimal(payload.get("commission", "0")),
                     sell_fee_bps=decimal(payload.get("sell_fee_bps", "0")),
                 )
+                self._json(result)
+                return
+            if path_value == "/api/round-starts":
+                symbol = str(payload.get("symbol", "TQQQ")).upper()
+                csv_path = resolve_csv_path(payload.get("csv_path"), symbol)
+                bars, diagnostics = load_prices(csv_path, str(payload["start_date"]), str(payload["end_date"]))
+                result = run_round_start_analysis(_config(payload), bars, diagnostics)
                 self._json(result)
                 return
             if path_value == "/api/download":
