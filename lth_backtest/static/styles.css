@@ -38,7 +38,7 @@ button { color: inherit; }
 
 .workspace { min-height: calc(100vh - 76px); display: grid; grid-template-columns: 330px minmax(0, 1fr); }
 .control-panel { background: #f8faf8; border-right: 1px solid var(--line-dark); padding: 20px; overflow-y: auto; height: calc(100vh - 76px); position: sticky; top: 0; }
-.market-data-manager { margin-bottom: 18px; padding: 14px; border: 1px solid #c9ded5; border-radius: 10px; background: linear-gradient(145deg,#fff 0%,#edf8f4 100%); box-shadow: 0 6px 18px rgba(8,119,91,.06); }
+.market-data-manager { margin-top: 18px; padding: 14px; border: 1px solid #c9ded5; border-radius: 10px; background: linear-gradient(145deg,#fff 0%,#edf8f4 100%); box-shadow: 0 6px 18px rgba(8,119,91,.06); }
 .market-data-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .market-data-head h2 { margin: 2px 0 0; font-size: 15px; letter-spacing: -.3px; }
 .data-scope { padding: 4px 7px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-dark); font-size: 10px; font-weight: 800; }
@@ -63,6 +63,28 @@ button { color: inherit; }
 .segmented span { display: block; text-align: center; padding: 7px; border-radius: 6px; color: var(--muted); font-weight: 700; }
 .segmented input:checked + span { background: var(--brand); color: #fff; }
 .field-help { color: var(--muted); font-size: 11px; margin: 8px 0 0; }
+.date-range-control { margin-top: 12px; padding: 11px 12px 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; transition: opacity .16s ease; }
+.date-range-control.disabled { opacity: .5; }
+.date-range-head,.date-range-values { display: flex; align-items: center; justify-content: space-between; gap: 9px; font-size: 10px; }
+.date-range-head { color: var(--muted); font-weight: 700; }
+.date-range-head strong { color: #3b4a42; font-size: 10px; }
+.dual-range { position: relative; height: 34px; margin: 2px 1px 0; }
+.range-rail { position: absolute; left: 0; right: 0; top: 15px; height: 4px; border-radius: 999px; background: #dce5e0; overflow: hidden; }
+.range-selected { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; border-radius: inherit; background: var(--brand); }
+.dual-range input[type="range"] { position: absolute; inset: 0; width: 100%; height: 34px; margin: 0; padding: 0; border: 0; background: transparent; appearance: none; -webkit-appearance: none; pointer-events: none; outline: none; }
+.dual-range input[type="range"]:first-of-type { z-index: 2; }
+.dual-range input[type="range"]:last-of-type { z-index: 3; }
+.dual-range input[type="range"]::-webkit-slider-runnable-track { height: 4px; border: 0; background: transparent; }
+.dual-range input[type="range"]::-moz-range-track { height: 4px; border: 0; background: transparent; }
+.dual-range input[type="range"]::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -7px; border: 2px solid var(--brand); border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(8,119,91,.25); -webkit-appearance: none; appearance: none; pointer-events: auto; cursor: grab; }
+.dual-range input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid var(--brand); border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(8,119,91,.25); pointer-events: auto; cursor: grab; }
+.dual-range input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
+.dual-range input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(8,119,91,.15); }
+.dual-range input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(8,119,91,.15); }
+.date-range-values { color: var(--muted); }
+.date-range-values output { min-width: 70px; color: var(--brand-dark); font-weight: 800; }
+.date-range-values output:last-child { text-align: right; }
+.date-range-values span { text-align: center; white-space: nowrap; }
 .advanced summary { cursor: pointer; font-size: 12px; font-weight: 800; color: #3b4a42; list-style: none; }
 .advanced summary::after { content: "+"; float: right; color: var(--muted); }
 .advanced[open] summary::after { content: "−"; }

@@ -10,6 +10,7 @@ const app = {
   roundStartLimit: 200,
   candleEnd: 0,
   candleHoverIndex: null,
+  dateRangeDates: [],
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -58,16 +59,124 @@ function matchingDatasets(symbol) {
   return (app.meta?.datasets || []).filter(item => item.name.toUpperCase().startsWith(symbol));
 }
 
+function lowerBound(dates, target) {
+  let low = 0, high = dates.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (dates[middle] < target) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+function upperBound(dates, target) {
+  let low = 0, high = dates.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (dates[middle] <= target) low = middle + 1;
+    else high = middle;
+  }
+  return low - 1;
+}
+
+function renderDateRange(startIndex, endIndex) {
+  const dates = app.dateRangeDates;
+  if (dates.length < 2) return;
+  const lastIndex = dates.length - 1;
+  startIndex = Math.max(0, Math.min(startIndex, lastIndex - 1));
+  endIndex = Math.max(startIndex + 1, Math.min(endIndex, lastIndex));
+
+  const startRange = $("#dateRangeStart"), endRange = $("#dateRangeEnd");
+  startRange.value = String(startIndex);
+  endRange.value = String(endIndex);
+  $("#startDate").value = dates[startIndex];
+  $("#endDate").value = dates[endIndex];
+  $("#dateRangeStartLabel").textContent = dates[startIndex];
+  $("#dateRangeEndLabel").textContent = dates[endIndex];
+  $("#dateRangeTradingDays").textContent = `${(endIndex - startIndex + 1).toLocaleString()}거래일`;
+
+  const left = startIndex / lastIndex * 100;
+  const right = endIndex / lastIndex * 100;
+  const selected = $("#dateRangeSelected");
+  selected.style.left = `${left}%`;
+  selected.style.width = `${right - left}%`;
+}
+
+function syncDateRangeFromSlider(changed) {
+  const dates = app.dateRangeDates;
+  if (dates.length < 2) return;
+  const lastIndex = dates.length - 1;
+  let startIndex = Number($("#dateRangeStart").value);
+  let endIndex = Number($("#dateRangeEnd").value);
+  if (startIndex >= endIndex) {
+    if (changed === "start") startIndex = Math.max(0, endIndex - 1);
+    else endIndex = Math.min(lastIndex, startIndex + 1);
+  }
+  renderDateRange(startIndex, endIndex);
+}
+
+function syncDateRangeFromInputs(changed) {
+  const dates = app.dateRangeDates;
+  if (dates.length < 2) return;
+  const lastIndex = dates.length - 1;
+  let startIndex = Math.max(0, Math.min(lowerBound(dates, $("#startDate").value || dates[0]), lastIndex));
+  let endIndex = Math.max(0, Math.min(upperBound(dates, $("#endDate").value || dates[lastIndex]), lastIndex));
+  if (startIndex >= endIndex) {
+    if (changed === "start") startIndex = Math.max(0, endIndex - 1);
+    else endIndex = Math.min(lastIndex, startIndex + 1);
+  }
+  renderDateRange(startIndex, endIndex);
+}
+
+function configureDateRange(dataset) {
+  const dates = Array.isArray(dataset?.dates) ? dataset.dates : [];
+  app.dateRangeDates = dates;
+  const control = $("#dateRangeControl");
+  const startRange = $("#dateRangeStart"), endRange = $("#dateRangeEnd");
+  const startDate = $("#startDate"), endDate = $("#endDate");
+  const disabled = dates.length < 2;
+  control.classList.toggle("disabled", disabled);
+  startRange.disabled = disabled;
+  endRange.disabled = disabled;
+
+  if (disabled) {
+    startDate.removeAttribute("min"); startDate.removeAttribute("max");
+    endDate.removeAttribute("min"); endDate.removeAttribute("max");
+    $("#dateRangeBounds").textContent = "사용자 CSV · 날짜 직접 입력";
+    $("#dateRangeStartLabel").textContent = "-";
+    $("#dateRangeEndLabel").textContent = "-";
+    $("#dateRangeTradingDays").textContent = "슬라이더 사용 불가";
+    $("#dateRangeSelected").style.width = "0";
+    return;
+  }
+
+  const lastIndex = dates.length - 1;
+  startRange.min = "0"; startRange.max = String(lastIndex);
+  endRange.min = "0"; endRange.max = String(lastIndex);
+  startDate.min = dates[0]; startDate.max = dates[lastIndex];
+  endDate.min = dates[0]; endDate.max = dates[lastIndex];
+  $("#dateRangeBounds").textContent = `${dates[0]} ~ ${dates[lastIndex]}`;
+
+  let startIndex = Math.max(0, Math.min(lowerBound(dates, startDate.value || dates[0]), lastIndex));
+  let endIndex = Math.max(0, Math.min(upperBound(dates, endDate.value || dates[lastIndex]), lastIndex));
+  if (startIndex >= endIndex) {
+    startIndex = Math.min(startIndex, lastIndex - 1);
+    endIndex = Math.max(endIndex, startIndex + 1);
+  }
+  renderDateRange(startIndex, endIndex);
+}
+
 function refreshDatasetChoices(force = false) {
   const symbol = selectedSymbol();
   const matches = matchingDatasets(symbol);
   $("#csvOptions").innerHTML = matches.map(item => `<option value="${escapeHtml(item.path)}">${item.start} ~ ${item.end} · ${item.rows.toLocaleString()}행</option>`).join("");
   const input = $("#csvPath");
-  if (force || !input.value) input.value = matches[0]?.path || `BackTest/data/${symbol}.csv`;
-  const current = matches.find(item => item.path === input.value) || matches[0];
+  if (force || !input.value) input.value = matches[0]?.path || `data/${symbol}.csv`;
+  const current = matches.find(item => item.path === input.value);
   $("#datasetInfo").textContent = current
     ? `${current.start} ~ ${current.end} · ${current.rows.toLocaleString()}거래일 · OHLC 고가 포함`
     : "CSV 경로를 직접 입력하거나 데이터를 다운로드하세요.";
+  configureDateRange(current);
 }
 
 function resetForm() {
@@ -547,6 +656,10 @@ $("#resetForm").addEventListener("click", resetForm);
 $("#refreshPrices").addEventListener("click", refreshPrices);
 $$("input[name=symbol]").forEach(input => input.addEventListener("change", () => refreshDatasetChoices(true)));
 $("#csvPath").addEventListener("change", () => refreshDatasetChoices(false));
+$("#dateRangeStart").addEventListener("input", () => syncDateRangeFromSlider("start"));
+$("#dateRangeEnd").addEventListener("input", () => syncDateRangeFromSlider("end"));
+$("#startDate").addEventListener("change", () => syncDateRangeFromInputs("start"));
+$("#endDate").addEventListener("change", () => syncDateRangeFromInputs("end"));
 $$('.tab').forEach(button => button.addEventListener("click", () => activateTab(button.dataset.tab)));
 $("#executionSearch").addEventListener("input", () => { app.executionLimit = 100; renderExecutions(); });
 $("#executionSide").addEventListener("change", () => { app.executionLimit = 100; renderExecutions(); });

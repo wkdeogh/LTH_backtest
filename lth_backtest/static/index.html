@@ -25,15 +25,6 @@
 
     <main class="workspace">
       <aside class="control-panel">
-        <section class="market-data-manager" aria-labelledby="marketDataTitle">
-          <div class="market-data-head">
-            <div><span class="eyebrow">MARKET DATA</span><h2 id="marketDataTitle">전체 가격 데이터</h2></div>
-            <span class="data-scope">3종목</span>
-          </div>
-          <p>TQQQ · SOXL · QLD의 전체 이력을 오늘 날짜까지 한 번에 갱신합니다.</p>
-          <button type="button" class="button secondary full" id="refreshPrices">전체 데이터 갱신</button>
-        </section>
-
         <form id="backtestForm">
           <div class="control-heading">
             <div><span class="eyebrow">SIMULATION</span><h2>백테스트 설정</h2></div>
@@ -43,11 +34,11 @@
           <section class="form-section">
             <h3>전략</h3>
             <div class="segmented" role="radiogroup" aria-label="종목">
-              <label><input type="radio" name="symbol" value="TQQQ" checked><span>TQQQ</span></label>
-              <label><input type="radio" name="symbol" value="SOXL"><span>SOXL</span></label>
+              <label><input type="radio" name="symbol" value="TQQQ"><span>TQQQ</span></label>
+              <label><input type="radio" name="symbol" value="SOXL" checked><span>SOXL</span></label>
             </div>
             <div class="field-grid two">
-              <label class="field"><span>분할 수</span><select name="split_count"><option value="40">40분할</option><option value="20">20분할</option><option value="30">30분할 · 실험</option></select></label>
+              <label class="field"><span>분할 수</span><select name="split_count"><option value="20" selected>20분할</option><option value="40">40분할</option><option value="30">30분할 · 실험</option></select></label>
               <label class="field"><span>운용 방식</span><select name="compounding_type"><option value="compound">복리</option><option value="simple">단리</option></select></label>
             </div>
             <label class="field"><span>시작 원금 ($)</span><input name="principal" type="number" min="1" step="0.01" value="20000" required></label>
@@ -56,17 +47,26 @@
 
           <section class="form-section">
             <h3>가격 데이터</h3>
-            <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="BackTest/data/TQQQ.csv" required><datalist id="csvOptions"></datalist></label>
+            <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="data/SOXL.csv" required><datalist id="csvOptions"></datalist></label>
             <p class="field-help" id="datasetInfo">OHLC 데이터의 고가로 장중 지정가 체결을 확인합니다.</p>
           </section>
 
           <section class="form-section">
             <h3>분석 기간</h3>
             <div class="field-grid two">
-              <label class="field"><span>시작일</span><input name="start_date" type="date" value="2020-01-01" required></label>
-              <label class="field"><span>종료일</span><input name="end_date" type="date" required></label>
+              <label class="field"><span>시작일</span><input name="start_date" id="startDate" type="date" value="2020-01-01" required></label>
+              <label class="field"><span>종료일</span><input name="end_date" id="endDate" type="date" required></label>
             </div>
-            <p class="field-help">선택한 기간은 일반 백테스트와 시작일별 1라운드 분석에 적용됩니다.</p>
+            <div class="date-range-control" id="dateRangeControl">
+              <div class="date-range-head"><span>전체 거래일 범위</span><strong id="dateRangeBounds">불러오는 중</strong></div>
+              <div class="dual-range" id="dualDateRange">
+                <div class="range-rail"><div class="range-selected" id="dateRangeSelected"></div></div>
+                <input id="dateRangeStart" type="range" min="0" max="1" value="0" aria-label="분석 시작 거래일">
+                <input id="dateRangeEnd" type="range" min="0" max="1" value="1" aria-label="분석 종료 거래일">
+              </div>
+              <div class="date-range-values"><output id="dateRangeStartLabel">-</output><span id="dateRangeTradingDays">-</span><output id="dateRangeEndLabel">-</output></div>
+            </div>
+            <p class="field-help">슬라이더는 실제 거래일 단위로 움직이며 일반 백테스트와 시작일별 1라운드 분석에 함께 적용됩니다.</p>
           </section>
 
           <details class="form-section advanced">
@@ -89,6 +89,15 @@
 
           <button class="button primary run-button" type="submit"><span>백테스트 실행</span><kbd>⌘ ↵</kbd></button>
         </form>
+
+        <section class="market-data-manager" aria-labelledby="marketDataTitle">
+          <div class="market-data-head">
+            <div><span class="eyebrow">MARKET DATA</span><h2 id="marketDataTitle">전체 가격 데이터</h2></div>
+            <span class="data-scope">3종목</span>
+          </div>
+          <p>TQQQ · SOXL · QLD의 전체 이력을 오늘 날짜까지 한 번에 갱신합니다.</p>
+          <button type="button" class="button secondary full" id="refreshPrices">전체 데이터 갱신</button>
+        </section>
       </aside>
 
       <section class="results-panel">

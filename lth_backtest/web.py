@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import mimetypes
 import threading
@@ -26,8 +27,8 @@ STATIC_ROOT = PACKAGE_ROOT / "static"
 
 def _config(payload: dict, fill_model: str | None = None) -> BacktestConfig:
     return BacktestConfig(
-        symbol=str(payload.get("symbol", "TQQQ")),
-        split_count=int(payload.get("split_count", 40)),
+        symbol=str(payload.get("symbol", "SOXL")),
+        split_count=int(payload.get("split_count", 20)),
         principal=decimal(payload.get("principal", "20000")),
         compounding_type=str(payload.get("compounding_type", "compound")),
         sell_percent=decimal(payload["sell_percent"]) if payload.get("sell_percent") not in (None, "") else None,
@@ -45,19 +46,21 @@ def _dataset_meta(path: Path) -> dict | None:
     if not path.exists() or path.suffix.lower() != ".csv":
         return None
     try:
-        with path.open("r", encoding="utf-8-sig") as file:
-            lines = file.readlines()
-        if len(lines) < 2:
+        with path.open("r", encoding="utf-8-sig", newline="") as file:
+            reader = csv.DictReader(file)
+            date_key = next((key for key in reader.fieldnames or [] if key.strip().lower() == "date"), None)
+            if date_key is None:
+                return None
+            dates = sorted(row[date_key].strip() for row in reader if row.get(date_key, "").strip())
+        if not dates:
             return None
-        first = lines[1].split(",", 1)[0]
-        last = lines[-1].split(",", 1)[0]
-        return {"path": str(path), "name": path.name, "rows": len(lines) - 1, "start": first, "end": last}
-    except OSError:
+        return {"path": str(path), "name": path.name, "rows": len(dates), "start": dates[0], "end": dates[-1], "dates": dates}
+    except (OSError, csv.Error, UnicodeError):
         return None
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "BackTestV2/2.2"
+    server_version = "BackTestV2/2.3"
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {format % args}")
@@ -116,7 +119,7 @@ class Handler(BaseHTTPRequestHandler):
                     item = _dataset_meta(path)
                     if item:
                         datasets.append(item)
-            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.2"})
+            self._json({"today": date.today().isoformat(), "datasets": datasets, "version": "2.3"})
             return
         self._serve_static(path_value)
 
@@ -125,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             payload = self._read_json()
             if path_value == "/api/run":
-                symbol = str(payload.get("symbol", "TQQQ")).upper()
+                symbol = str(payload.get("symbol", "SOXL")).upper()
                 csv_path = resolve_csv_path(payload.get("csv_path"), symbol)
                 bars, diagnostics = load_prices(csv_path, str(payload["start_date"]), str(payload["end_date"]))
                 qld_bars = None
@@ -169,7 +172,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(result)
                 return
             if path_value == "/api/round-starts":
-                symbol = str(payload.get("symbol", "TQQQ")).upper()
+                symbol = str(payload.get("symbol", "SOXL")).upper()
                 csv_path = resolve_csv_path(payload.get("csv_path"), symbol)
                 bars, diagnostics = load_prices(csv_path, str(payload["start_date"]), str(payload["end_date"]))
                 result = run_round_start_analysis(_config(payload), bars, diagnostics)
