@@ -17,6 +17,7 @@ STRATEGY_META = {
     "soxx_buy_hold": {"label": "SOXX Buy & Hold", "color": "#2865d5"},
     "soxl_buy_hold": {"label": "SOXL Buy & Hold", "color": "#c43e45"},
 }
+HOLD_BENCHMARK_ORDER = ("previous_high", "soxx_buy_hold", "soxl_buy_hold")
 
 
 def _buy_and_hold(
@@ -75,6 +76,63 @@ def _strategy_payload(label_key: str, summary: dict, metrics: dict) -> dict:
         **STRATEGY_META[label_key],
         "summary": summary,
         "metrics": metrics,
+    }
+
+
+def run_previous_high_hold_benchmarks(
+    previous_config: PreviousHighConfig,
+    soxx_prices: list[PriceBar],
+    soxl_prices: list[PriceBar],
+    *,
+    previous_result: dict | None = None,
+    data_diagnostics: dict | None = None,
+) -> dict:
+    """Build exact SOXX/SOXL hold curves for the previous-high dashboard."""
+    pairs, alignment = align_price_series(soxx_prices, soxl_prices, "SOXX", "SOXL")
+    common_soxx = [left for left, _ in pairs]
+    common_soxl = [right for _, right in pairs]
+    previous = previous_result or run_previous_high_backtest(
+        previous_config, common_soxx, common_soxl, data_diagnostics,
+    )
+    soxx_hold = _buy_and_hold(
+        "SOXX", common_soxx, previous_config.principal, previous_config.fractional_shares,
+        previous_config.slippage_bps, previous_config.commission, previous_config.annual_risk_free_rate,
+    )
+    soxl_hold = _buy_and_hold(
+        "SOXL", common_soxl, previous_config.principal, previous_config.fractional_shares,
+        previous_config.slippage_bps, previous_config.commission, previous_config.annual_risk_free_rate,
+    )
+    results = {
+        "previous_high": previous,
+        "soxx_buy_hold": soxx_hold,
+        "soxl_buy_hold": soxl_hold,
+    }
+    strategies = {
+        key: _strategy_payload(key, value["summary"], value["metrics"])
+        for key, value in results.items()
+    }
+    curve_maps = {
+        "previous_high": {row["date"]: row["equity"] for row in previous["equity_curve"]},
+        "soxx_buy_hold": {row["date"]: row["equity"] for row in soxx_hold["equity_curve"]},
+        "soxl_buy_hold": {row["date"]: row["equity"] for row in soxl_hold["equity_curve"]},
+    }
+    drawdown_maps = {
+        "previous_high": {row["date"]: row["drawdown"] for row in previous["equity_curve"]},
+        "soxx_buy_hold": {row["date"]: row["drawdown"] for row in soxx_hold["equity_curve"]},
+        "soxl_buy_hold": {row["date"]: row["drawdown"] for row in soxl_hold["equity_curve"]},
+    }
+    equity_curve: list[dict] = []
+    for soxx, _ in pairs:
+        row: dict = {"date": soxx.date}
+        for key in HOLD_BENCHMARK_ORDER:
+            row[key] = curve_maps[key][soxx.date]
+            row[f"{key}_drawdown"] = drawdown_maps[key][soxx.date]
+        equity_curve.append(row)
+    return {
+        "strategy_order": list(HOLD_BENCHMARK_ORDER),
+        "strategies": strategies,
+        "equity_curve": equity_curve,
+        "alignment": alignment,
     }
 
 

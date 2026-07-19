@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from .data import DATA_ROOT, PACKAGE_ROOT, PRICE_BASIS_ACTUAL, align_price_series, download_all_prices, load_prices, resolve_csv_path
-from .comparison import run_strategy_comparison
+from .comparison import run_previous_high_hold_benchmarks, run_strategy_comparison
 from .engine import run_backtest
 from .models import BacktestConfig
 from .parameter_sweep import run_parameter_sweep
@@ -123,6 +123,13 @@ def _run_payload(payload: dict) -> dict:
         # the two selectable candlestick views.
         pairs, _ = align_price_series(soxx_bars, soxl_bars, "SOXX", "SOXL")
         result = run_previous_high_backtest(previous_config, soxx_bars, soxl_bars, diagnostics)
+        result["benchmarks"] = run_previous_high_hold_benchmarks(
+            previous_config,
+            soxx_bars,
+            soxl_bars,
+            previous_result=result,
+            data_diagnostics=diagnostics,
+        )
         result["market_data"] = {
             "SOXX": [left for left, _ in pairs],
             "SOXL": [right for _, right in pairs],

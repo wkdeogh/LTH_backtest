@@ -69,6 +69,11 @@ class PreviousHighWebApiTests(unittest.TestCase):
         result = _run_payload(payload)
         self.assertEqual(result["result_type"], "previous_high")
         self.assertNotIn("comparison", result)
+        self.assertEqual(
+            result["benchmarks"]["strategy_order"],
+            ["previous_high", "soxx_buy_hold", "soxl_buy_hold"],
+        )
+        self.assertEqual(len(result["benchmarks"]["equity_curve"]), 6)
         self.assertEqual(len(result["market_data"]["SOXX"]), 6)
         self.assertEqual(len(result["market_data"]["SOXL"]), 6)
         self.assertEqual(result["config"]["price_basis"], "actual_split_adjusted")

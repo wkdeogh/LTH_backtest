@@ -33,11 +33,24 @@ const cls = value => Number(value) > 0 ? "positive" : Number(value) < 0 ? "negat
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const CANDLE_COLORS = Object.freeze({ rise: "#e43f45", fall: "#1976d2", flat: "#78837d" });
 const STRATEGY_SERIES = Object.freeze({
-  previous_high: { key: "previous_high", label: "전고점 매매법", color: "#08775b" },
-  infinite_v4: { key: "infinite_v4", label: "무한매수법 V4", color: "#7651b8" },
-  soxx_buy_hold: { key: "soxx_buy_hold", label: "SOXX", color: "#2865d5" },
-  soxl_buy_hold: { key: "soxl_buy_hold", label: "SOXL", color: "#c43e45" },
+  previous_high: { key: "previous_high", label: "전고점 매매법", color: "#08775b", lineWidth: 2.7, dash: [] },
+  infinite_v4: { key: "infinite_v4", label: "무한매수법 V4", color: "#7651b8", lineWidth: 2, dash: [8, 4] },
+  soxx_buy_hold: { key: "soxx_buy_hold", label: "SOXX 거치식", color: "#2865d5", lineWidth: 2, dash: [3, 3] },
+  soxl_buy_hold: { key: "soxl_buy_hold", label: "SOXL 거치식", color: "#c43e45", lineWidth: 2, dash: [11, 4, 2, 4] },
 });
+const SERIES_CLASS = Object.freeze({ previous_high: "previous-high", infinite_v4: "lth-v4", soxx_buy_hold: "soxx", soxl_buy_hold: "soxl" });
+
+function comparisonSeries(comparison, keys = comparison?.strategy_order || Object.keys(STRATEGY_SERIES)) {
+  return keys.filter(key => STRATEGY_SERIES[key]).map(key => {
+    const style = STRATEGY_SERIES[key];
+    const metadata = comparison?.strategies?.[key] || {};
+    return { ...style, label: metadata.label || style.label, key };
+  });
+}
+
+function seriesLegendHtml(series) {
+  return series.map(item => `<span class="series ${SERIES_CLASS[item.key] || ""}">${escapeHtml(item.label)}</span>`).join("");
+}
 
 async function api(path, body) {
   const response = await fetch(path, {
@@ -379,11 +392,21 @@ function renderPreviousHighOverview(result) {
     ["누락 제외", `${Number((alignment.left_only_count || 0) + (alignment.right_only_count || 0)).toLocaleString()}행`],
   ]);
   $("#warningList").innerHTML = (result.warnings || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
-  app.equityPoints = result.equity_curve || [];
-  app.chartPoints = app.equityPoints;
-  app.equitySeries = [{ key: "equity", label: "전고점 매매법", color: "#08775b" }];
-  $("#equityChartDescription").textContent = "전고점 매매법의 일별 종가 평가액입니다. 네 전략의 동시 비교는 전략 비교 탭에서 확인할 수 있습니다.";
-  $("#equityLegend").innerHTML = '<span class="series previous-high">전고점 매매법</span>';
+  const dashboardComparison = result.comparison || result.benchmarks;
+  if (dashboardComparison?.equity_curve?.length) {
+    const dashboardKeys = ["previous_high", "soxx_buy_hold", "soxl_buy_hold"];
+    app.equityPoints = dashboardComparison.equity_curve;
+    app.chartPoints = app.equityPoints;
+    app.equitySeries = comparisonSeries(dashboardComparison, dashboardKeys);
+    $("#equityChartDescription").textContent = "전고점 매매법과 SOXX·SOXL 거치식의 일별 종가 평가액을 비교합니다.";
+    $("#equityLegend").innerHTML = seriesLegendHtml(app.equitySeries);
+  } else {
+    app.equityPoints = result.equity_curve || [];
+    app.chartPoints = app.equityPoints;
+    app.equitySeries = [{ key: "equity", label: "전고점 매매법", color: "#08775b", lineWidth: 2.7, dash: [] }];
+    $("#equityChartDescription").textContent = "전고점 매매법의 일별 종가 평가액입니다.";
+    $("#equityLegend").innerHTML = '<span class="series previous-high">전고점 매매법</span>';
+  }
   requestAnimationFrame(renderCharts);
 }
 
@@ -572,6 +595,11 @@ function renderComparison(result) {
   $("#comparisonEmpty").classList.add("hidden");
   $("#comparisonResults").classList.remove("hidden");
   const order = comparison.strategy_order || Object.keys(STRATEGY_SERIES);
+  const chartSeries = comparisonSeries(comparison, order);
+  const legend = seriesLegendHtml(chartSeries);
+  $("#comparisonLegend").innerHTML = legend;
+  $("#comparisonEquityLegend").innerHTML = legend;
+  $("#comparisonDrawdownLegend").innerHTML = legend;
   $("#comparisonSummary").innerHTML = order.map(key => {
     const item = comparison.strategies[key];
     return summaryCard(item.label, money(item.summary.ending_equity), `${percent(item.summary.profit_rate, 2, true)} · MDD ${percent(item.metrics.close_mdd, 1)}`, cls(item.summary.profit_rate));
@@ -933,7 +961,7 @@ function drawLineSeriesChart(canvas, points, series, options = {}) {
     ctx.fillStyle = "#77827c"; ctx.textAlign = "right"; ctx.fillText(axisLabel(inverse(transformedValue)), padding.left - 7, y);
   }
   series.forEach(item => {
-    ctx.strokeStyle = item.color; ctx.lineWidth = item.lineWidth || 2; ctx.lineJoin = "round"; ctx.beginPath();
+    ctx.strokeStyle = item.color; ctx.lineWidth = item.lineWidth || 2; ctx.lineJoin = "round"; ctx.setLineDash(item.dash || []); ctx.beginPath();
     let started = false;
     points.forEach((point, index) => {
       const value = Number(point[item.key]);
@@ -943,6 +971,7 @@ function drawLineSeriesChart(canvas, points, series, options = {}) {
     });
     ctx.stroke();
   });
+  ctx.setLineDash([]);
   ctx.fillStyle = "#77827c"; ctx.textBaseline = "bottom"; ctx.textAlign = "left"; ctx.fillText(points[0].date, padding.left, height - 2); ctx.textAlign = "right"; ctx.fillText(points.at(-1).date, width - padding.right, height - 2);
   canvas._seriesChart = { points, series, pointX, padding, width, height, useLog };
   canvas._chart = canvas._seriesChart;
@@ -953,12 +982,18 @@ function drawEquity() {
 }
 
 function drawDrawdown() {
-  drawLineSeriesChart($("#drawdownChart"), app.equityPoints, [{ key: "drawdown", label: "낙폭", color: "#c43e45" }], { percentAxis: true, includeZero: true, padding: { left: 45, right: 12, top: 12, bottom: 22 } });
+  const comparisonDrawdowns = app.equitySeries
+    .filter(item => app.equityPoints.some(point => point[`${item.key}_drawdown`] != null))
+    .map(item => ({ ...item, key: `${item.key}_drawdown` }));
+  const series = comparisonDrawdowns.length
+    ? comparisonDrawdowns
+    : [{ key: "drawdown", label: "낙폭", color: "#c43e45" }];
+  drawLineSeriesChart($("#drawdownChart"), app.equityPoints, series, { percentAxis: true, includeZero: true, padding: { left: 45, right: 12, top: 12, bottom: 22 } });
 }
 
 function drawComparisonCharts() {
   if (!app.comparisonPoints.length) return;
-  const series = (app.result?.comparison?.strategy_order || Object.keys(STRATEGY_SERIES)).map(key => ({ ...STRATEGY_SERIES[key], ...(app.result?.comparison?.strategies?.[key] || {}) }));
+  const series = comparisonSeries(app.result?.comparison);
   drawLineSeriesChart($("#comparisonEquityChart"), app.comparisonPoints, series, { logScale: $("#comparisonEquityLogScale")?.checked });
   drawLineSeriesChart($("#comparisonDrawdownChart"), app.comparisonPoints, series.map(item => ({ ...item, key: `${item.key}_drawdown` })), { percentAxis: true, includeZero: true });
 }

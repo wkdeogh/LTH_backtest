@@ -3,7 +3,13 @@ from __future__ import annotations
 import unittest
 from decimal import Decimal
 
-from lth_backtest.comparison import STRATEGY_META, _buy_and_hold, run_strategy_comparison
+from lth_backtest.comparison import (
+    HOLD_BENCHMARK_ORDER,
+    STRATEGY_META,
+    _buy_and_hold,
+    run_previous_high_hold_benchmarks,
+    run_strategy_comparison,
+)
 from lth_backtest.models import PriceBar
 from lth_backtest.previous_high import PreviousHighConfig
 
@@ -107,6 +113,21 @@ class StrategyComparisonTests(unittest.TestCase):
         self.assertEqual(result["config"]["v4_fill_model"], "intraday_high")
         self.assertEqual(result["config"]["v4_initial_entry"], "moc")
         self.assertEqual(result["config"]["v4_first_buy_buffer_percent"], D("12"))
+
+    def test_previous_high_dashboard_benchmarks_have_three_exact_curves(self) -> None:
+        benchmarks = run_previous_high_hold_benchmarks(
+            PreviousHighConfig(D("20000")), self.soxx, self.soxl,
+        )
+
+        self.assertEqual(benchmarks["strategy_order"], list(HOLD_BENCHMARK_ORDER))
+        self.assertEqual(set(benchmarks["strategies"]), set(HOLD_BENCHMARK_ORDER))
+        self.assertEqual([row["date"] for row in benchmarks["equity_curve"]], [
+            "2024-01-02", "2024-01-04", "2024-01-05", "2024-01-08",
+        ])
+        for row in benchmarks["equity_curve"]:
+            for key in HOLD_BENCHMARK_ORDER:
+                self.assertIn(key, row)
+                self.assertIn(f"{key}_drawdown", row)
 
     def test_dynamic_max_drawdown_period_marks_unrecovered_path(self) -> None:
         dates = ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
