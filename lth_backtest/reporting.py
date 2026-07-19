@@ -161,7 +161,12 @@ def _render_previous_high_comparison_html_report(result: object) -> str:
     strategy_metrics = data["strategy_metrics"]
     period = data["period"]
     comparison = data["comparison"]
-    comparison_name = "4전략 + QLD 거치식" if "qld_buy_hold" in comparison["strategy_order"] else "4전략"
+    if {"tqqq_buy_hold", "qld_buy_hold"}.issubset(comparison["strategy_order"]):
+        comparison_name = "6전략"
+    elif "qld_buy_hold" in comparison["strategy_order"]:
+        comparison_name = "4전략 + QLD 거치식"
+    else:
+        comparison_name = "4전략"
     price_basis_copy = html.escape(_price_basis_copy(data))
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("<", "\\u003c")
 

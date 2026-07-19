@@ -15,7 +15,7 @@ from lth_backtest.previous_high import PreviousHighConfig
 
 
 D = Decimal
-FOUR_STRATEGY_ORDER = ["previous_high", "infinite_v4", "soxx_buy_hold", "soxl_buy_hold"]
+FOUR_STRATEGY_ORDER = ["infinite_v4", "previous_high", "soxl_buy_hold", "soxx_buy_hold"]
 
 
 def bar(date: str, close: str) -> PriceBar:
@@ -115,12 +115,19 @@ class StrategyComparisonTests(unittest.TestCase):
         self.assertEqual(result["config"]["v4_initial_entry"], "moc")
         self.assertEqual(result["config"]["v4_first_buy_buffer_percent"], D("12"))
 
-    def test_qld_buy_and_hold_is_fifth_curve_on_strict_three_symbol_dates(self) -> None:
+    def test_tqqq_and_qld_are_fifth_and_sixth_curves_on_strict_common_dates(self) -> None:
         qld = [
             bar("2024-01-02", "10"),
             bar("2024-01-04", "9"),
             bar("2024-01-08", "13"),
             bar("2024-01-10", "14"),
+        ]
+        tqqq = [
+            bar("2024-01-02", "40"),
+            bar("2024-01-04", "36"),
+            bar("2024-01-05", "44"),
+            bar("2024-01-08", "52"),
+            bar("2024-01-11", "56"),
         ]
 
         result = run_strategy_comparison(
@@ -128,6 +135,7 @@ class StrategyComparisonTests(unittest.TestCase):
             self.soxx,
             self.soxl,
             qld_prices=qld,
+            tqqq_prices=tqqq,
             v4_initial_entry="moc",
         )
         comparison = result["comparison"]
@@ -137,16 +145,23 @@ class StrategyComparisonTests(unittest.TestCase):
         self.assertEqual(set(comparison["strategies"]), set(STRATEGY_META))
         self.assertEqual([row["date"] for row in comparison["equity_curve"]], expected_dates)
         self.assertEqual([row["date"] for row in result["market_data"]["QLD"]], expected_dates)
+        self.assertEqual([row["date"] for row in result["market_data"]["TQQQ"]], expected_dates)
         self.assertEqual(comparison["strategies"]["qld_buy_hold"]["summary"]["ending_equity"], D("26000.0000"))
+        self.assertEqual(comparison["strategies"]["tqqq_buy_hold"]["summary"]["ending_equity"], D("26000.0000"))
         self.assertEqual(comparison["alignment"]["common_row_count"], 3)
         self.assertEqual(comparison["alignment"]["soxx_soxl_common_row_count"], 4)
         self.assertEqual(comparison["alignment"]["excluded_for_qld_count"], 1)
+        self.assertEqual(comparison["alignment"]["excluded_for_tqqq_count"], 0)
+        self.assertEqual(comparison["alignment"]["excluded_for_optional_benchmarks_count"], 1)
         self.assertEqual(result["diagnostics"]["qld_alignment"]["right_only_count"], 1)
-        self.assertTrue(any("SOXX·SOXL·QLD의 공통 거래일" in item for item in result["warnings"]))
-        self.assertTrue(any("QLD가 없는 1개 거래일" in item for item in result["warnings"]))
+        self.assertEqual(result["diagnostics"]["tqqq_alignment"]["right_only_count"], 1)
+        self.assertTrue(any("SOXX·SOXL·TQQQ·QLD의 공통 거래일" in item for item in result["warnings"]))
+        self.assertTrue(any("TQQQ 또는 QLD가 없는 1개 거래일" in item for item in result["warnings"]))
         for row in comparison["equity_curve"]:
             self.assertIn("qld_buy_hold", row)
             self.assertIn("qld_buy_hold_drawdown", row)
+            self.assertIn("tqqq_buy_hold", row)
+            self.assertIn("tqqq_buy_hold_drawdown", row)
 
     def test_previous_high_dashboard_benchmarks_have_three_exact_curves(self) -> None:
         benchmarks = run_previous_high_hold_benchmarks(

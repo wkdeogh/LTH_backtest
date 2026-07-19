@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lth_backtest.web import _previous_high_config, _run_payload, _run_sweep_payload
+from lth_backtest.web import _previous_high_config, _run_payload, _run_strategy_random_payload, _run_sweep_payload
 
 
 class PreviousHighWebApiTests(unittest.TestCase):
@@ -14,6 +14,7 @@ class PreviousHighWebApiTests(unittest.TestCase):
         root = Path(self.directory.name)
         self.soxx = root / "SOXX.csv"
         self.soxl = root / "SOXL.csv"
+        self.tqqq = root / "TQQQ.csv"
         self.qld = root / "QLD.csv"
         dates = ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-08"]
         soxx = [(100, 100), (96, 94), (96, 96), (94, 94), (89, 89), (101, 101)]
@@ -40,6 +41,13 @@ class PreviousHighWebApiTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        self.tqqq.write_text(
+            header + "".join(
+                f"{date},{price},{price},{price},{price},{price},1,actual_split_adjusted\n"
+                for date, price in zip(dates, [40, 39, 41, 38, 37, 45])
+            ),
+            encoding="utf-8",
+        )
         self.payload = {
             "analysis_mode": "compare",
             "principal": "20000",
@@ -47,6 +55,7 @@ class PreviousHighWebApiTests(unittest.TestCase):
             "end_date": dates[-1],
             "soxx_csv_path": str(self.soxx),
             "soxl_csv_path": str(self.soxl),
+            "tqqq_csv_path": str(self.tqqq),
             "qld_csv_path": str(self.qld),
             "trigger_interval_pct": "5",
             "divisions": 20,
@@ -60,17 +69,18 @@ class PreviousHighWebApiTests(unittest.TestCase):
         self.assertTrue(config.fractional_shares)
         self.assertEqual(str(config.liquidation_offset_pct), "0")
 
-    def test_run_payload_returns_four_strategies_plus_qld_comparison(self) -> None:
+    def test_run_payload_returns_six_strategy_comparison(self) -> None:
         result = _run_payload(self.payload)
         self.assertEqual(result["result_type"], "comparison")
         self.assertEqual(result["schema_version"], 1)
         self.assertEqual(result["summary"]["ending_equity"], 20308.0)
         self.assertEqual(
             set(result["comparison"]["strategies"]),
-            {"previous_high", "infinite_v4", "soxx_buy_hold", "soxl_buy_hold", "qld_buy_hold"},
+            {"previous_high", "infinite_v4", "soxx_buy_hold", "soxl_buy_hold", "tqqq_buy_hold", "qld_buy_hold"},
         )
         self.assertEqual(result["period"]["trading_days"], 6)
         self.assertEqual(len(result["market_data"]["SOXX"]), 6)
+        self.assertEqual(len(result["market_data"]["TQQQ"]), 6)
         self.assertEqual(len(result["market_data"]["QLD"]), 6)
         self.assertEqual(result["config"]["price_basis"], "actual_split_adjusted")
 
@@ -106,6 +116,29 @@ class PreviousHighWebApiTests(unittest.TestCase):
         result = _run_sweep_payload(payload)
         self.assertEqual([period["name"] for period in result["periods"]], ["전체"])
         self.assertFalse(result["methodology"]["subperiod_validation"])
+
+    def test_strategy_random_payload_uses_control_panel_settings_for_six_cards(self) -> None:
+        payload = dict(
+            self.payload,
+            count=3,
+            min_days=2,
+            max_days=4,
+            seed=11,
+            split_count=20,
+            trigger_interval_pct="4",
+            divisions=25,
+            initial_entry="moc",
+        )
+
+        result = _run_strategy_random_payload(payload)
+
+        self.assertEqual(result["result_type"], "strategy_random_comparison")
+        self.assertEqual(len(result["summary"]), 6)
+        self.assertEqual(len(result["rows"]), 3)
+        self.assertEqual(result["config"]["v4_split_count"], 20)
+        self.assertEqual(result["config"]["trigger_interval_pct"], 4.0)
+        self.assertEqual(result["config"]["divisions"], 25)
+        self.assertTrue(result["methodology"]["same_period_for_all_strategies"])
 
     def test_mixed_price_basis_is_rejected(self) -> None:
         text = self.soxl.read_text(encoding="utf-8").replace("actual_split_adjusted", "user_provided")

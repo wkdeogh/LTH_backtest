@@ -13,7 +13,7 @@
       <div class="brand-mark">V3</div>
       <div class="brand-copy">
         <h1>BackTest <span>version3</span></h1>
-        <p>무한매수법 V4 · 전고점매매법 · 4전략 정밀 비교</p>
+        <p>무한매수법 V4 · 전고점매매법 · 6전략 정밀 비교</p>
       </div>
       <div class="top-actions">
         <span class="status-dot" id="serverStatus">연결 확인 중</span>
@@ -36,7 +36,7 @@
             <div class="segmented three" id="analysisModeSelector" role="radiogroup" aria-label="분석 모드">
               <label><input type="radio" name="analysis_mode" value="lth_v4" checked><span>무한매수 V4</span></label>
               <label><input type="radio" name="analysis_mode" value="previous_high"><span>전고점</span></label>
-              <label><input type="radio" name="analysis_mode" value="compare"><span>4전략 비교</span></label>
+              <label><input type="radio" name="analysis_mode" value="compare"><span>6전략 비교</span></label>
             </div>
             <p class="field-help" id="analysisModeHelp">기존 무한매수법 V4를 단독으로 정밀 분석합니다.</p>
             <label class="field"><span>시작 원금 ($)</span><input name="principal" type="number" min="1" step="0.01" value="20000" required></label>
@@ -48,7 +48,7 @@
               <label><input type="radio" name="symbol" value="TQQQ"><span>TQQQ</span></label>
               <label><input type="radio" name="symbol" value="SOXL" checked><span>SOXL</span></label>
             </div>
-            <p class="field-help hidden" id="compareV4SymbolNote" data-analysis-modes="compare">4전략 비교의 무한매수법 V4는 SOXL로 고정하며 분할·운용·매도 설정만 적용합니다.</p>
+            <p class="field-help hidden" id="compareV4SymbolNote" data-analysis-modes="compare">6전략 비교의 무한매수법 V4는 SOXL로 고정하며 분할·운용·매도 설정만 적용합니다.</p>
             <div class="field-grid two">
               <label class="field"><span>분할 수</span><select name="split_count"><option value="20" selected>20분할</option><option value="40">40분할</option><option value="30">30분할 · 실험</option></select></label>
               <label class="field"><span>운용 방식</span><select name="compounding_type"><option value="compound">복리</option><option value="simple">단리</option></select></label>
@@ -146,7 +146,7 @@
           <button class="tab" id="roundStartsTab" data-tab="round-starts" data-analysis-modes="lth_v4">시작일별 1라운드 <span id="roundStartCount"></span></button>
           <button class="tab" data-tab="periods">기간별 수익</button>
           <button class="tab hidden" id="parameterSweepTab" data-tab="sweep" data-analysis-modes="previous_high compare">파라미터 탐색</button>
-          <button class="tab" id="randomComparisonTab" data-tab="random" data-analysis-modes="lth_v4">랜덤 비교</button>
+          <button class="tab" id="randomComparisonTab" data-tab="random" data-analysis-modes="lth_v4 compare">랜덤 비교</button>
         </nav>
 
         <div class="loading hidden" id="loading"><div class="spinner"></div><strong>정밀 계산 중입니다</strong><span>일별 주문과 체결을 순서대로 검증하고 있습니다.</span></div>
@@ -194,12 +194,12 @@
 
         <section class="tab-page hidden" id="tab-comparison" data-analysis-modes="compare">
           <div class="analysis-heading">
-            <div><span class="eyebrow">FOUR STRATEGIES + QLD</span><h2>동일 조건 4전략 + QLD 비교</h2><p>같은 초기자본·거래일·비용 조건으로 전고점 매매법, 무한매수법 V4, SOXX·SOXL·QLD 거치식을 비교합니다.</p></div>
+            <div><span class="eyebrow">SIX-STRATEGY COMPARISON</span><h2>동일 조건 6전략 비교</h2><p>같은 초기자본·거래일·비용 조건으로 무한매수법 V4, 전고점 매매법, SOXL·SOXX·TQQQ·QLD 거치식을 비교합니다.</p></div>
             <div class="series-legend" id="comparisonLegend" aria-label="비교 전략 범례">
-              <span class="series previous-high">전고점 매매법</span><span class="series lth-v4">무한매수 V4</span><span class="series soxx">SOXX</span><span class="series soxl">SOXL</span><span class="series qld">QLD</span>
+              <span class="series lth-v4">무한매수 V4</span><span class="series previous-high">전고점 매매법</span><span class="series soxl">SOXL</span><span class="series soxx">SOXX</span><span class="series tqqq">TQQQ</span><span class="series qld">QLD</span>
             </div>
           </div>
-          <div class="empty-mini" id="comparisonEmpty">4전략 비교 모드로 백테스트를 실행하면 QLD를 포함한 성과표와 비교 차트가 표시됩니다.</div>
+          <div class="empty-mini" id="comparisonEmpty">6전략 비교 모드로 백테스트를 실행하면 성과표와 비교 차트가 표시됩니다.</div>
           <div class="hidden" id="comparisonResults">
             <div class="summary-grid comparison-summary" id="comparisonSummary"></div>
             <article class="panel comparison-hypothesis-panel" aria-labelledby="comparisonHypothesisTitle">
@@ -209,26 +209,26 @@
             </article>
             <article class="panel comparison-matrix-panel">
               <div class="panel-head"><div><h3>핵심 성과지표</h3><p>수익·낙폭·변동성·연도별 성과를 동일 기준으로 비교합니다.</p></div></div>
-              <div class="data-table comparison-matrix-table"><table id="comparisonMetricTable"><thead><tr id="comparisonMetricHead"><th>지표</th><th class="previous-high-text">전고점 매매법</th><th class="lth-v4-text">무한매수 V4</th><th class="soxx-text">SOXX</th><th class="soxl-text">SOXL</th><th class="qld-text">QLD</th></tr></thead><tbody id="comparisonMetricRows"></tbody></table></div>
+              <div class="data-table comparison-matrix-table"><table id="comparisonMetricTable"><thead><tr id="comparisonMetricHead"><th>지표</th><th class="lth-v4-text">무한매수 V4</th><th class="previous-high-text">전고점 매매법</th><th class="soxl-text">SOXL</th><th class="soxx-text">SOXX</th><th class="tqqq-text">TQQQ</th><th class="qld-text">QLD</th></tr></thead><tbody id="comparisonMetricRows"></tbody></table></div>
             </article>
             <div class="analysis-chart-stack comparison-chart-stack">
               <article class="panel analysis-chart-panel">
-                <div class="panel-head"><div><h3>4전략 + QLD 자산 곡선</h3><p>다섯 비교선의 일별 종가 평가금액을 함께 표시합니다.</p></div><div class="chart-head-actions"><label class="chart-toggle"><input id="comparisonEquityLogScale" type="checkbox"><span>로그 축</span></label><div class="series-legend chart-series-legend" id="comparisonEquityLegend"></div></div></div>
-                <div class="analysis-chart-wrap"><canvas id="comparisonEquityChart" role="img" aria-label="4전략과 QLD 자산 곡선 비교"></canvas><div class="chart-tooltip hidden" id="comparisonEquityTooltip"></div></div>
+                <div class="panel-head"><div><h3>6전략 자산 곡선</h3><p>여섯 비교선의 일별 종가 평가금액을 함께 표시합니다.</p></div><div class="chart-head-actions"><label class="chart-toggle"><input id="comparisonEquityLogScale" type="checkbox"><span>로그 축</span></label><div class="series-legend chart-series-legend" id="comparisonEquityLegend"></div></div></div>
+                <div class="analysis-chart-wrap"><canvas id="comparisonEquityChart" role="img" aria-label="6전략 자산 곡선 비교"></canvas><div class="chart-tooltip hidden" id="comparisonEquityTooltip"></div></div>
               </article>
               <article class="panel analysis-chart-panel">
-                <div class="panel-head"><div><h3>4전략 + QLD Drawdown</h3><p>각 비교선의 종가 기준 고점 대비 낙폭을 비교합니다.</p></div><div class="series-legend chart-series-legend" id="comparisonDrawdownLegend"></div></div>
-                <div class="analysis-chart-wrap"><canvas id="comparisonDrawdownChart" role="img" aria-label="4전략과 QLD 낙폭 비교"></canvas><div class="chart-tooltip hidden" id="comparisonDrawdownTooltip"></div></div>
+                <div class="panel-head"><div><h3>6전략 Drawdown</h3><p>각 비교선의 종가 기준 고점 대비 낙폭을 비교합니다.</p></div><div class="series-legend chart-series-legend" id="comparisonDrawdownLegend"></div></div>
+                <div class="analysis-chart-wrap"><canvas id="comparisonDrawdownChart" role="img" aria-label="6전략 낙폭 비교"></canvas><div class="chart-tooltip hidden" id="comparisonDrawdownTooltip"></div></div>
               </article>
             </div>
             <article class="panel comparison-table-panel">
               <div class="panel-head"><div><h3>연도별 성과</h3><p>한 해 동안의 수익률과 전략별 우위를 비교합니다.</p></div></div>
               <div class="summary-grid comparison-year-summary" id="comparisonYearSummary"></div>
-              <div class="data-table comparison-wide-table"><table id="comparisonYearTable"><thead><tr id="comparisonYearHead"><th>연도</th><th>전고점 매매법</th><th>무한매수법 V4</th><th>SOXX</th><th>SOXL</th><th>QLD</th></tr></thead><tbody id="comparisonYearRows"></tbody></table></div>
+              <div class="data-table comparison-wide-table"><table id="comparisonYearTable"><thead><tr id="comparisonYearHead"><th>연도</th><th>무한매수법 V4</th><th>전고점 매매법</th><th>SOXL</th><th>SOXX</th><th>TQQQ</th><th>QLD</th></tr></thead><tbody id="comparisonYearRows"></tbody></table></div>
             </article>
             <article class="panel comparison-table-panel">
               <div class="panel-head"><div><h3>기간·시장 국면별 검증</h3><p>전체·초기·중간·최근 구간과 주요 하락장의 성과를 분리해 확인합니다.</p></div></div>
-              <div class="data-table comparison-wide-table"><table id="comparisonRegimeTable"><thead><tr id="comparisonRegimeHead"><th>구간</th><th>시작</th><th>종료</th><th>전고점</th><th>무한매수 V4</th><th>SOXX</th><th>SOXL</th><th>QLD</th></tr></thead><tbody id="comparisonRegimeRows"></tbody></table></div>
+              <div class="data-table comparison-wide-table"><table id="comparisonRegimeTable"><thead><tr id="comparisonRegimeHead"><th>구간</th><th>시작</th><th>종료</th><th>무한매수 V4</th><th>전고점</th><th>SOXL</th><th>SOXX</th><th>TQQQ</th><th>QLD</th></tr></thead><tbody id="comparisonRegimeRows"></tbody></table></div>
             </article>
           </div>
         </section>
@@ -238,7 +238,7 @@
             <div><span class="eyebrow">PREVIOUS-HIGH ANALYTICS</span><h2>전고점 매매법 심층 분석</h2><p>하락 깊이에 따른 SOXL 비중과 실질 레버리지, 라운드 위험을 추적합니다.</p></div>
             <span class="strategy-chip previous-high-chip">전고점 매매법</span>
           </div>
-          <div class="empty-mini" id="previousHighAnalyticsEmpty">전고점 매매법 또는 4전략 비교를 실행하면 전용 분석이 표시됩니다.</div>
+          <div class="empty-mini" id="previousHighAnalyticsEmpty">전고점 매매법 또는 6전략 비교를 실행하면 전용 분석이 표시됩니다.</div>
           <div class="hidden" id="previousHighAnalyticsResults">
             <div class="summary-grid previous-high-summary" id="previousHighSummary"></div>
             <div class="analysis-note" id="previousHighAnalysisNote"></div>
@@ -397,14 +397,22 @@
         <section class="tab-page" id="tab-random">
           <div class="random-layout">
             <form class="panel random-form" id="randomForm">
-              <div class="panel-head"><div><h2>랜덤 기간 견고성 비교</h2><p>동일 기간의 전략, 종목 거치식, QLD를 비교합니다.</p></div></div>
-              <div class="choice-row"><label><input type="checkbox" name="symbols" value="TQQQ" checked><span>TQQQ</span></label><label><input type="checkbox" name="symbols" value="SOXL" checked><span>SOXL</span></label></div>
-              <div class="choice-row"><label><input type="checkbox" name="splits" value="20" checked><span>20분할</span></label><label><input type="checkbox" name="splits" value="40" checked><span>40분할</span></label><label><input type="checkbox" name="splits" value="30"><span>30분할 · 실험</span></label></div>
+              <div class="panel-head"><div><h2 id="randomTitle">랜덤 기간 견고성 비교</h2><p id="randomDescription">동일 기간의 전략, 종목 거치식, QLD를 비교합니다.</p></div></div>
+              <div id="randomLthOptions" data-analysis-modes="lth_v4">
+                <div class="choice-row"><label><input type="checkbox" name="symbols" value="TQQQ" checked><span>TQQQ</span></label><label><input type="checkbox" name="symbols" value="SOXL" checked><span>SOXL</span></label></div>
+                <div class="choice-row"><label><input type="checkbox" name="splits" value="20" checked><span>20분할</span></label><label><input type="checkbox" name="splits" value="40" checked><span>40분할</span></label><label><input type="checkbox" name="splits" value="30"><span>30분할 · 실험</span></label></div>
+              </div>
+              <div class="random-fixed-settings hidden" id="randomStrategySettings" data-analysis-modes="compare">
+                <strong>왼쪽 컨트롤 패널 설정 고정</strong>
+                <span id="randomV4Setting">무한매수법 V4 · SOXL 20분할</span>
+                <span id="randomPreviousHighSetting">전고점 매매법 · 5% × 20분할</span>
+                <small>종목·분할 조합을 추가하지 않고 이 두 설정과 4개 거치식을 동일 랜덤 기간에서 비교합니다.</small>
+              </div>
               <div class="field-grid three"><label class="field"><span>샘플 수</span><input name="count" type="number" min="1" max="2000" value="100"></label><label class="field"><span>최소 거래일</span><input name="min_days" type="number" min="2" value="60"></label><label class="field"><span>최대 거래일</span><input name="max_days" type="number" min="2" placeholder="전체"></label></div>
               <label class="field"><span>재현 시드</span><input name="seed" type="number" placeholder="비우면 무작위"></label>
               <button class="button primary full" type="submit">랜덤 비교 실행</button>
             </form>
-            <div class="random-results" id="randomResults"><div class="empty-mini">랜덤 비교를 실행하면 조합별 평균·최악 수익률과 승률을 보여줍니다.</div></div>
+            <div class="random-results" id="randomResults"><div class="empty-mini">랜덤 비교를 실행하면 평균·최악 수익률과 MDD를 보여줍니다.</div></div>
           </div>
         </section>
       </section>

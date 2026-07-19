@@ -23,6 +23,7 @@ from .previous_high import PreviousHighConfig, run_previous_high_backtest
 from .random_compare import run_random_comparison
 from .reporting import render_html_report
 from .round_analysis import run_round_start_analysis
+from .strategy_random import run_strategy_random_comparison
 
 
 STATIC_ROOT = PACKAGE_ROOT / "static"
@@ -87,6 +88,21 @@ def _load_previous_high_inputs(payload: dict) -> tuple[list, list, dict]:
     return soxx_bars, soxl_bars, diagnostics
 
 
+def _load_comparison_benchmarks(payload: dict, diagnostics: dict) -> tuple[list, list]:
+    start_date = str(payload["start_date"])
+    end_date = str(payload["end_date"])
+    loaded: dict[str, list] = {}
+    expected_basis = diagnostics["SOXX"].get("price_basis")
+    for symbol in ("TQQQ", "QLD"):
+        path = resolve_csv_path(payload.get(f"{symbol.lower()}_csv_path"), symbol)
+        bars, symbol_diagnostics = load_prices(path, start_date, end_date)
+        if symbol_diagnostics.get("price_basis") != expected_basis:
+            raise ValueError("SOXX·SOXL·TQQQ·QLD 데이터의 가격 기준이 다릅니다. 같은 기준의 CSV를 사용하세요.")
+        loaded[symbol] = bars
+        diagnostics[symbol] = symbol_diagnostics
+    return loaded["TQQQ"], loaded["QLD"]
+
+
 def _run_payload(payload: dict) -> dict:
     analysis_mode = str(payload.get("analysis_mode", "lth_v4"))
     if analysis_mode not in {"lth_v4", "previous_high", "compare"}:
@@ -135,18 +151,13 @@ def _run_payload(payload: dict) -> dict:
             "SOXL": [right for _, right in pairs],
         }
     else:
-        qld_path = resolve_csv_path(payload.get("qld_csv_path"), "QLD")
-        qld_bars, qld_diagnostics = load_prices(
-            qld_path, str(payload["start_date"]), str(payload["end_date"]),
-        )
-        if qld_diagnostics.get("price_basis") != diagnostics["SOXX"].get("price_basis"):
-            raise ValueError("SOXX·SOXL·QLD 데이터의 가격 기준이 다릅니다. 같은 기준의 CSV를 사용하세요.")
-        diagnostics["QLD"] = qld_diagnostics
+        tqqq_bars, qld_bars = _load_comparison_benchmarks(payload, diagnostics)
         result = run_strategy_comparison(
             previous_config,
             soxx_bars,
             soxl_bars,
             qld_prices=qld_bars,
+            tqqq_prices=tqqq_bars,
             v4_split_count=int(payload.get("split_count", 20)),
             v4_compounding_type=str(payload.get("compounding_type", "compound")),
             v4_sell_percent=decimal(payload["sell_percent"]) if payload.get("sell_percent") not in (None, "") else None,
@@ -182,6 +193,29 @@ def _run_sweep_payload(payload: dict) -> dict:
         include_subperiods=_as_bool(payload.get("subperiod_validation", True)),
         data_diagnostics=diagnostics,
     ))
+
+
+def _run_strategy_random_payload(payload: dict) -> dict:
+    soxx_bars, soxl_bars, diagnostics = _load_previous_high_inputs(payload)
+    tqqq_bars, qld_bars = _load_comparison_benchmarks(payload, diagnostics)
+    return run_strategy_random_comparison(
+        _previous_high_config(payload),
+        soxx_bars,
+        soxl_bars,
+        tqqq_bars,
+        qld_bars,
+        count=int(payload.get("count", 100)),
+        min_days=int(payload.get("min_days", 60)),
+        max_days=int(payload["max_days"]) if payload.get("max_days") not in (None, "") else None,
+        seed=int(payload["seed"]) if payload.get("seed") not in (None, "") else None,
+        v4_split_count=int(payload.get("split_count", 20)),
+        v4_compounding_type=str(payload.get("compounding_type", "compound")),
+        v4_sell_percent=decimal(payload["sell_percent"]) if payload.get("sell_percent") not in (None, "") else None,
+        v4_fill_model=str(payload.get("fill_model", "intraday_high")),
+        v4_initial_entry=str(payload.get("initial_entry", "web_loc")),
+        v4_first_buy_buffer_percent=decimal(payload.get("first_buy_buffer_percent", "12")),
+        data_diagnostics=diagnostics,
+    )
 
 
 def _dataset_meta(path: Path) -> dict | None:
@@ -285,6 +319,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(_run_sweep_payload(payload))
                 return
             if path_value == "/api/random":
+                if str(payload.get("analysis_mode", "lth_v4")) == "compare":
+                    self._json(_run_strategy_random_payload(payload))
+                    return
                 csv_dir = Path(payload["csv_dir"]).expanduser() if payload.get("csv_dir") else None
                 result = run_random_comparison(
                     symbols=[str(item) for item in payload.get("symbols", ["TQQQ", "SOXL"])],

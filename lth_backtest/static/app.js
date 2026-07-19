@@ -33,13 +33,14 @@ const cls = value => Number(value) > 0 ? "positive" : Number(value) < 0 ? "negat
 const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
 const CANDLE_COLORS = Object.freeze({ rise: "#e43f45", fall: "#1976d2", flat: "#78837d" });
 const STRATEGY_SERIES = Object.freeze({
-  previous_high: { key: "previous_high", label: "전고점 매매법", color: "#08775b", lineWidth: 2.7, dash: [] },
   infinite_v4: { key: "infinite_v4", label: "무한매수법 V4", color: "#7651b8", lineWidth: 2, dash: [] },
-  soxx_buy_hold: { key: "soxx_buy_hold", label: "SOXX 거치식", color: "#2865d5", lineWidth: 2, dash: [] },
+  previous_high: { key: "previous_high", label: "전고점 매매법", color: "#08775b", lineWidth: 2.7, dash: [] },
   soxl_buy_hold: { key: "soxl_buy_hold", label: "SOXL 거치식", color: "#c43e45", lineWidth: 2, dash: [] },
+  soxx_buy_hold: { key: "soxx_buy_hold", label: "SOXX 거치식", color: "#2865d5", lineWidth: 2, dash: [] },
+  tqqq_buy_hold: { key: "tqqq_buy_hold", label: "TQQQ 거치식", color: "#008c9e", lineWidth: 2, dash: [] },
   qld_buy_hold: { key: "qld_buy_hold", label: "QLD 거치식", color: "#d18a18", lineWidth: 2, dash: [] },
 });
-const SERIES_CLASS = Object.freeze({ previous_high: "previous-high", infinite_v4: "lth-v4", soxx_buy_hold: "soxx", soxl_buy_hold: "soxl", qld_buy_hold: "qld" });
+const SERIES_CLASS = Object.freeze({ previous_high: "previous-high", infinite_v4: "lth-v4", soxx_buy_hold: "soxx", soxl_buy_hold: "soxl", tqqq_buy_hold: "tqqq", qld_buy_hold: "qld" });
 
 function comparisonSeries(comparison, keys = comparison?.strategy_order || Object.keys(STRATEGY_SERIES)) {
   return keys.filter(key => STRATEGY_SERIES[key]).map(key => {
@@ -254,11 +255,20 @@ function refreshPreviousHighDatasetChoices(force = false) {
   };
   const soxx = configure("SOXX", "#soxxCsvPath", "#soxxCsvOptions");
   const soxl = configure("SOXL", "#soxlCsvPath", "#soxlCsvOptions");
-  const commonDates = intersectTradingDates(soxx?.dates, soxl?.dates);
-  const missing = Math.max((soxx?.dates?.length || 0) + (soxl?.dates?.length || 0) - commonDates.length * 2, 0);
+  const datasets = [soxx, soxl];
+  const symbols = ["SOXX", "SOXL"];
+  if (selectedAnalysisMode() === "compare") {
+    datasets.push(matchingDatasets("TQQQ")[0], matchingDatasets("QLD")[0]);
+    symbols.push("TQQQ", "QLD");
+  }
+  const commonDates = datasets.slice(1).reduce(
+    (dates, item) => intersectTradingDates(dates, item?.dates),
+    datasets[0]?.dates || [],
+  );
+  const missing = Math.max(datasets.reduce((total, item) => total + (item?.dates?.length || 0), 0) - commonDates.length * datasets.length, 0);
   $("#sharedDatasetInfo").textContent = commonDates.length
-    ? `${commonDates[0]} ~ ${commonDates.at(-1)} · 공통 거래일 ${commonDates.length.toLocaleString()}개 · 비공통 행 ${missing.toLocaleString()}개 제외 · 전일 가격 채움 없음`
-    : "SOXX와 SOXL 데이터의 공통 거래일을 확인할 수 없습니다. CSV 경로와 전체 데이터 갱신 상태를 확인하세요.";
+    ? `${commonDates[0]} ~ ${commonDates.at(-1)} · ${symbols.join("·")} 공통 거래일 ${commonDates.length.toLocaleString()}개 · 비공통 행 ${missing.toLocaleString()}개 제외 · 전일 가격 채움 없음`
+    : `${symbols.join("·")} 데이터의 공통 거래일을 확인할 수 없습니다. CSV 경로와 전체 데이터 갱신 상태를 확인하세요.`;
   return { dates: commonDates };
 }
 
@@ -303,13 +313,35 @@ function syncAnalysisMode(refreshDatasets = true) {
   const descriptions = {
     lth_v4: "기존 무한매수법 V4를 단독으로 정밀 분석합니다.",
     previous_high: "SOXX 하락 단계마다 SOXL로 전환하고 전고점 회복 시 SOXX로 복귀합니다.",
-    compare: "전고점·무한매수 V4·SOXX·SOXL에 QLD 거치식까지 동일 조건으로 비교합니다.",
+    compare: "무한매수 V4·전고점 매매법과 SOXL·SOXX·TQQQ·QLD 거치식을 동일 조건으로 비교합니다.",
   };
   $("#analysisModeHelp").textContent = descriptions[mode];
-  $("#backtestForm button[type=submit] span").textContent = mode === "compare" ? "4전략 비교 실행" : "백테스트 실행";
+  $("#backtestForm button[type=submit] span").textContent = mode === "compare" ? "6전략 비교 실행" : "백테스트 실행";
+  syncRandomModeCopy(mode);
   if ($(".tab.active")?.classList.contains("hidden")) activateTab("overview");
   ensureCandleSymbolControl();
   if (refreshDatasets) refreshDatasetChoices(true);
+}
+
+function syncRandomModeCopy(mode = selectedAnalysisMode()) {
+  const form = $("#backtestForm");
+  const compare = mode === "compare";
+  $("#randomTitle").textContent = compare ? "6전략 랜덤 기간 비교" : "랜덤 기간 견고성 비교";
+  $("#randomDescription").textContent = compare
+    ? "같은 무작위 기간에서 두 매매법과 네 거치식의 수익률·MDD를 비교합니다."
+    : "동일 기간의 전략, 종목 거치식, QLD를 비교합니다.";
+  const sampleInput = $("#randomForm")?.elements.count;
+  if (sampleInput) {
+    sampleInput.max = compare ? "500" : "2000";
+    if (Number(sampleInput.value) > Number(sampleInput.max)) sampleInput.value = sampleInput.max;
+  }
+  if (!form) return;
+  const split = form.elements.split_count?.value || "20";
+  const compound = form.elements.compounding_type?.value === "simple" ? "단리" : "복리";
+  const interval = form.elements.trigger_interval_pct?.value || "5";
+  const divisions = form.elements.divisions?.value || "20";
+  $("#randomV4Setting").textContent = `무한매수법 V4 · SOXL ${split}분할 · ${compound}`;
+  $("#randomPreviousHighSetting").textContent = `전고점 매매법 · ${interval}% × ${divisions}분할`;
 }
 
 function resetForm() {
@@ -336,6 +368,7 @@ function formPayload() {
     csv_path: raw.csv_path,
     soxx_csv_path: raw.soxx_csv_path,
     soxl_csv_path: raw.soxl_csv_path,
+    tqqq_csv_path: raw.tqqq_csv_path,
     qld_csv_path: raw.qld_csv_path,
     trigger_interval_pct: raw.trigger_interval_pct || "5",
     divisions: Number(raw.divisions || 20),
@@ -363,6 +396,7 @@ function activateTab(name) {
   if (name === "comparison" && app.result?.comparison) requestAnimationFrame(drawComparisonCharts);
   if (name === "previous-high" && isPreviousHighResult()) requestAnimationFrame(drawPreviousHighCharts);
   if (name === "sweep" && app.sweepResult) requestAnimationFrame(renderSweepCharts);
+  if (name === "random") syncRandomModeCopy();
 }
 
 function summaryCard(label, value, detail = "", valueClass = "") {
@@ -377,7 +411,7 @@ function renderPreviousHighOverview(result) {
   $("#emptyState").classList.add("hidden");
   $("#resultsContent").classList.remove("hidden");
   const { config, period, summary, metrics, strategy_metrics: strategy, diagnostics } = result;
-  $("#resultTitle").textContent = result.result_type === "comparison" ? "4전략 + QLD 비교 · 전고점 매매법" : "전고점 매매법 결과";
+  $("#resultTitle").textContent = result.result_type === "comparison" ? "6전략 비교 · 무한매수 V4와 전고점 매매법" : "전고점 매매법 결과";
   $("#resultPeriod").textContent = `${period.start} — ${period.end} · ${Number(period.trading_days).toLocaleString()}거래일`;
   $("#fillBadge").textContent = "시가·종가 확인형";
   $("#modeBadge").textContent = `${number(config.trigger_interval_pct, 2)}% · ${config.divisions}분할`;
@@ -409,7 +443,7 @@ function renderPreviousHighOverview(result) {
     ["주문 수", `${Number(strategy.order_count || summary.order_count || 0).toLocaleString()}건`],
     ["SOXX 완전 소진", strategy.soxx_exhausted ? `있음 · ${percent(strategy.first_exhaustion_drawdown)}` : "없음"],
     ["공통 거래일", `${Number(alignment.common_row_count || period.trading_days || 0).toLocaleString()}일`],
-    ["누락 제외", `${Number((alignment.left_only_count || 0) + (alignment.right_only_count || 0) + (alignment.excluded_for_qld_count || 0)).toLocaleString()}행`],
+    ["누락 제외", `${Number((alignment.left_only_count || 0) + (alignment.right_only_count || 0) + (alignment.excluded_for_optional_benchmarks_count ?? alignment.excluded_for_qld_count ?? 0)).toLocaleString()}행`],
   ]);
   $("#warningList").innerHTML = (result.warnings || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
   const dashboardComparison = result.comparison || result.benchmarks;
@@ -421,7 +455,7 @@ function renderPreviousHighOverview(result) {
     app.chartPoints = app.equityPoints;
     app.equitySeries = comparisonSeries(dashboardComparison, dashboardKeys);
     $("#equityChartDescription").textContent = result.comparison
-      ? "전고점·무한매수 V4·SOXX·SOXL·QLD의 일별 종가 평가액을 비교합니다."
+      ? "무한매수 V4·전고점·SOXL·SOXX·TQQQ·QLD의 일별 종가 평가액을 비교합니다."
       : "전고점 매매법과 SOXX·SOXL 거치식의 일별 종가 평가액을 비교합니다.";
     $("#equityLegend").innerHTML = seriesLegendHtml(app.equitySeries);
   } else {
@@ -1373,16 +1407,63 @@ async function runRandom(event) {
   event.preventDefault();
   const main = formPayload(), raw = new FormData(event.currentTarget);
   const symbols = raw.getAll("symbols"), splits = raw.getAll("splits").map(Number);
-  if (!symbols.length || !splits.length) return toast("랜덤 비교 종목과 분할 수를 선택하세요.", true);
+  const strategyComparison = selectedAnalysisMode() === "compare";
+  if (!strategyComparison && (!symbols.length || !splits.length)) return toast("랜덤 비교 종목과 분할 수를 선택하세요.", true);
   const body = { ...main, symbols, splits, count: Number(raw.get("count")), min_days: Number(raw.get("min_days")), max_days: raw.get("max_days") || null, seed: raw.get("seed") || null };
-  setLoading(true, "랜덤 기간을 반복 계산 중입니다");
-  try { app.randomResult = await api("/api/random", body); renderRandom(app.randomResult); toast("랜덤 비교가 완료되었습니다."); }
+  setLoading(true, strategyComparison ? "같은 랜덤 기간에서 6전략을 반복 계산 중입니다" : "랜덤 기간을 반복 계산 중입니다");
+  try { app.randomResult = await api("/api/random", body); renderRandom(app.randomResult); toast(strategyComparison ? "6전략 랜덤 비교가 완료되었습니다." : "랜덤 비교가 완료되었습니다."); }
   catch (error) { toast(error.message, true); }
   finally { setLoading(false); }
 }
 
 function renderRandom(result) {
+  if (result.result_type === "strategy_random_comparison") {
+    renderStrategyRandom(result);
+    return;
+  }
   $("#randomResults").innerHTML = `<div class="random-summary-grid">${result.summary.map(item => `<article class="random-card"><h3>${item.symbol} · ${item.split_count}분할</h3><span class="big ${cls(item.avg_strategy_profit_rate)}">${percent(item.avg_strategy_profit_rate, 2, true)}</span><dl><div><dt>거치식 대비</dt><dd class="${cls(item.avg_excess_vs_hold)}">${percent(item.avg_excess_vs_hold, 2, true)}p</dd></div><div><dt>QLD 대비</dt><dd class="${cls(item.avg_excess_vs_qld)}">${percent(item.avg_excess_vs_qld, 2, true)}p</dd></div><div><dt>전략 승률</dt><dd>${percent(item.strategy_win_rate, 1)}</dd></div><div><dt>최악 / 최고</dt><dd>${percent(item.worst_return, 1)} / ${percent(item.best_return, 1, true)}</dd></div><div><dt>최악 MDD</dt><dd class="negative">${percent(item.worst_close_mdd, 1)}</dd></div><div><dt>고가 전용 체결</dt><dd>${item.intraday_high_only_fills.toLocaleString()}건</dd></div></dl></article>`).join("")}</div>`;
+}
+
+function renderStrategyRandom(result) {
+  const config = result.config;
+  const summaryByKey = Object.fromEntries(result.summary.map(item => [item.key, item]));
+  const cards = result.summary.map(item => {
+    const style = STRATEGY_SERIES[item.key] || {};
+    const label = style.label || item.label;
+    const seriesClass = SERIES_CLASS[item.key] || "";
+    return `<article class="random-card strategy-random-card ${seriesClass}">
+      <div class="random-card-head"><h3>${escapeHtml(label)}</h3><span class="rank-badge">평균 ${item.average_return_rank}위</span></div>
+      <span class="big ${cls(item.avg_return_rate)}">${percent(item.avg_return_rate, 2, true)}</span>
+      <small>평균 수익률 · 평균 자산 ${money(item.avg_ending_equity)}</small>
+      <dl>
+        <div><dt>평균 / 최악 MDD</dt><dd class="negative">${percent(item.avg_close_mdd, 1)} / ${percent(item.worst_close_mdd, 1)}</dd></div>
+        <div><dt>수익률 1위 비율</dt><dd>${percent(item.return_win_rate, 1)}</dd></div>
+        <div><dt>최소 MDD 비율</dt><dd>${percent(item.lowest_mdd_rate, 1)}</dd></div>
+        <div><dt>평균 수익 순위</dt><dd>${number(item.avg_return_rank, 2)}위</dd></div>
+        <div><dt>양(+) 구간</dt><dd>${percent(item.positive_period_rate, 1)}</dd></div>
+        <div><dt>최악 / 최고 수익</dt><dd>${percent(item.worst_return_rate, 1)} / ${percent(item.best_return_rate, 1, true)}</dd></div>
+      </dl>
+    </article>`;
+  }).join("");
+  const headers = result.strategy_order.map(key => `<th class="${SERIES_CLASS[key] || ""}-text">${escapeHtml(STRATEGY_SERIES[key]?.label || summaryByKey[key]?.label || key)}</th>`).join("");
+  const rows = result.rows.map(row => `<tr>
+    <td>${row.sample}</td><td>${row.start_date}<br><small>~ ${row.end_date}</small></td><td>${Number(row.trading_days).toLocaleString()}일</td>
+    ${result.strategy_order.map(key => {
+      const item = row.strategies[key];
+      return `<td><strong class="${cls(item.return_rate)}">${percent(item.return_rate, 2, true)}</strong><small>MDD ${percent(item.close_mdd, 1)} · ${item.return_rank}위</small></td>`;
+    }).join("")}
+  </tr>`).join("");
+  const seedText = config.seed == null ? "무작위" : Number(config.seed).toLocaleString();
+  $("#randomResults").innerHTML = `
+    <div class="strategy-random-intro">
+      <div><span class="eyebrow">SAME RANDOM WINDOWS</span><h2>6전략 랜덤 성과 요약</h2><p>${result.period.start} ~ ${result.period.end} 공통 데이터에서 ${Number(config.count).toLocaleString()}개 구간을 동일하게 적용했습니다.</p></div>
+      <div class="strategy-random-config"><span>V4 SOXL ${config.v4_split_count}분할</span><span>전고점 ${number(config.trigger_interval_pct, 2)}% × ${config.divisions}분할</span><span>시드 ${seedText}</span></div>
+    </div>
+    <div class="random-summary-grid strategy-random-grid">${cards}</div>
+    <article class="panel strategy-random-table-panel">
+      <div class="panel-head"><div><h3>랜덤 구간별 수익률·MDD</h3><p>각 칸의 큰 값은 총수익률, 아래 값은 종가 MDD와 구간 내 수익 순위입니다. 공동 1위는 승률을 균등 배분합니다.</p></div></div>
+      <div class="data-table strategy-random-table"><table><thead><tr><th>#</th><th>기간</th><th>거래일</th>${headers}</tr></thead><tbody>${rows}</tbody></table></div>
+    </article>`;
 }
 
 function moveCandleWindow(direction) {
@@ -1471,6 +1552,9 @@ $("#runRoundStarts").addEventListener("click", runRoundStarts);
 $("#resetForm").addEventListener("click", resetForm);
 $("#refreshPrices").addEventListener("click", refreshPrices);
 $$('input[name=analysis_mode]').forEach(input => input.addEventListener("change", () => syncAnalysisMode(true)));
+[$("#backtestForm").elements.split_count, $("#backtestForm").elements.compounding_type, $("#backtestForm").elements.trigger_interval_pct, $("#backtestForm").elements.divisions]
+  .filter(Boolean)
+  .forEach(input => input.addEventListener("change", () => syncRandomModeCopy()));
 $$("input[name=symbol]").forEach(input => input.addEventListener("change", () => refreshDatasetChoices(true)));
 $("#csvPath").addEventListener("change", () => refreshDatasetChoices(false));
 $("#soxxCsvPath").addEventListener("change", () => configureDateRange(refreshPreviousHighDatasetChoices(false)));
