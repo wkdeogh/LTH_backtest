@@ -24,7 +24,9 @@ def decimal(value: Decimal | str | int | float | None, default: str = "0") -> De
 
 def quantize(value: Decimal, quantum: Decimal) -> Decimal:
     with localcontext() as context:
-        context.prec = 34
+        fractional_digits = max(-quantum.as_tuple().exponent, 0)
+        integral_digits = max(value.adjusted() + 1, 1) if value.is_finite() else 1
+        context.prec = max(34, integral_digits + fractional_digits + 2)
         return value.quantize(quantum, rounding=ROUND_HALF_UP)
 
 

@@ -89,6 +89,43 @@ class StrategyRandomComparisonTests(unittest.TestCase):
         self.assertEqual([item[0] for item in updates if item[2] == "backtesting"], [1, 2, 3, 4])
         self.assertEqual(updates[-1], (4, 4, "summarizing"))
 
+    def test_uniform_start_sampling_uses_even_starts_and_fixed_length(self) -> None:
+        result = self.execute(
+            count=4,
+            min_days=3,
+            max_days=9,
+            seed=999,
+            uniform_start_sampling=True,
+        )
+
+        self.assertEqual(
+            [(row["start_date"], row["end_date"], row["trading_days"]) for row in result["rows"]],
+            [
+                ("2024-01-02", "2024-01-04", 3),
+                ("2024-01-04", "2024-01-06", 3),
+                ("2024-01-06", "2024-01-08", 3),
+                ("2024-01-08", "2024-01-10", 3),
+            ],
+        )
+        self.assertTrue(result["config"]["uniform_start_sampling"])
+        self.assertEqual(result["methodology"]["fixed_trading_days"], 3)
+        self.assertTrue(result["methodology"]["seed_ignored"])
+
+    def test_uniform_start_sampling_caps_count_to_valid_fixed_length_starts(self) -> None:
+        result = self.execute(
+            count=50,
+            min_days=3,
+            max_days=2,
+            uniform_start_sampling=True,
+        )
+
+        self.assertEqual(result["config"]["requested_count"], 50)
+        self.assertEqual(result["config"]["count"], 8)
+        self.assertEqual(len(result["rows"]), 8)
+        self.assertEqual({row["trading_days"] for row in result["rows"]}, {3})
+        self.assertTrue(result["methodology"]["sample_count_capped"])
+        self.assertIn("8개 시작일까지만", result["warnings"][-1])
+
     def test_invalid_sample_limits_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "1~5,000"):
             self.execute(count=5001)

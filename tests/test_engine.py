@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from lth_backtest.engine import Simulator, apply_t_effect, calculate_star_percent, run_backtest
 from lth_backtest.models import BacktestConfig, PriceBar
-from lth_backtest.precision import round_money, round_order_price
+from lth_backtest.precision import round_money, round_order_price, round_rate
 
 
 D = Decimal
@@ -33,6 +33,7 @@ class FormulaTests(unittest.TestCase):
     def test_rounding_is_half_up_not_bankers_rounding(self) -> None:
         self.assertEqual(round_order_price(D("1.005")), D("1.01"))
         self.assertEqual(round_money(D("500.5641025641")), D("500.5641"))
+        self.assertEqual(round_rate(D("1E+40")), D("10000000000000000000000000000000000000000.00000000"))
 
 
 class FillModelTests(unittest.TestCase):

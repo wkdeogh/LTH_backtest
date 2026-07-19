@@ -213,6 +213,7 @@ def _run_strategy_random_payload(payload: dict, progress_callback=None) -> dict:
         min_days=int(payload.get("min_days", 60)),
         max_days=int(payload["max_days"]) if payload.get("max_days") not in (None, "") else None,
         seed=int(payload["seed"]) if payload.get("seed") not in (None, "") else None,
+        uniform_start_sampling=_as_bool(payload.get("uniform_start_sampling")),
         v4_split_count=int(payload.get("split_count", 20)),
         v4_compounding_type=str(payload.get("compounding_type", "compound")),
         v4_sell_percent=decimal(payload["sell_percent"]) if payload.get("sell_percent") not in (None, "") else None,

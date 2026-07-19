@@ -344,6 +344,18 @@ function syncRandomModeCopy(mode = selectedAnalysisMode()) {
   const divisions = form.elements.divisions?.value || "20";
   $("#randomV4Setting").textContent = `무한매수법 V4 · SOXL ${split}분할 · ${compound}`;
   $("#randomPreviousHighSetting").textContent = `전고점 매매법 · ${interval}% × ${divisions}분할`;
+  syncUniformSamplingControls(mode);
+}
+
+function syncUniformSamplingControls(mode = selectedAnalysisMode()) {
+  const form = $("#randomForm");
+  if (!form) return;
+  const checkbox = form.elements.uniform_start_sampling;
+  const active = mode === "compare" && Boolean(checkbox?.checked) && !checkbox.disabled;
+  form.elements.max_days.disabled = active;
+  form.elements.seed.disabled = active;
+  form.elements.max_days.closest("label")?.classList.toggle("disabled", active);
+  form.elements.seed.closest("label")?.classList.toggle("disabled", active);
 }
 
 function resetForm() {
@@ -1412,7 +1424,7 @@ async function runRandom(event) {
   const symbols = raw.getAll("symbols"), splits = raw.getAll("splits").map(Number);
   const strategyComparison = selectedAnalysisMode() === "compare";
   if (!strategyComparison && (!symbols.length || !splits.length)) return toast("랜덤 비교 종목과 분할 수를 선택하세요.", true);
-  const body = { ...main, symbols, splits, count: Number(raw.get("count")), min_days: Number(raw.get("min_days")), max_days: raw.get("max_days") || null, seed: raw.get("seed") || null };
+  const body = { ...main, symbols, splits, count: Number(raw.get("count")), min_days: Number(raw.get("min_days")), max_days: raw.get("max_days") || null, seed: raw.get("seed") || null, uniform_start_sampling: strategyComparison && raw.get("uniform_start_sampling") === "on" };
   setRandomRunning(true);
   try {
     app.randomJob = await api("/api/random/jobs", body);
@@ -1510,10 +1522,19 @@ function renderStrategyRandom(result) {
     }).join("")}
   </tr>`).join("");
   const seedText = config.seed == null ? "무작위" : Number(config.seed).toLocaleString();
+  const uniformSampling = Boolean(config.uniform_start_sampling);
+  const requestedCount = Number(config.requested_count ?? config.count);
+  const appliedCount = Number(config.count);
+  const countText = requestedCount > appliedCount
+    ? `요청 ${requestedCount.toLocaleString()}개 중 가능한 ${appliedCount.toLocaleString()}개 구간`
+    : `${appliedCount.toLocaleString()}개 구간`;
+  const samplingText = uniformSampling
+    ? `균등 시작일 · ${Number(config.min_days).toLocaleString()}거래일 고정`
+    : `시드 ${seedText}`;
   $("#randomResults").innerHTML = `
     <div class="strategy-random-intro">
-      <div><span class="eyebrow">SAME RANDOM WINDOWS</span><h2>6전략 랜덤 성과 요약</h2><p>${result.period.start} ~ ${result.period.end} 공통 데이터에서 ${Number(config.count).toLocaleString()}개 구간을 동일하게 적용했습니다.</p></div>
-      <div class="strategy-random-config"><span>V4 SOXL ${config.v4_split_count}분할</span><span>전고점 ${number(config.trigger_interval_pct, 2)}% × ${config.divisions}분할</span><span>시드 ${seedText}</span></div>
+      <div><span class="eyebrow">${uniformSampling ? "EVENLY SPACED STARTS" : "SAME RANDOM WINDOWS"}</span><h2>6전략 랜덤 성과 요약</h2><p>${result.period.start} ~ ${result.period.end} 공통 데이터에서 ${countText}을 여섯 전략에 동일하게 적용했습니다.</p></div>
+      <div class="strategy-random-config"><span>V4 SOXL ${config.v4_split_count}분할</span><span>전고점 ${number(config.trigger_interval_pct, 2)}% × ${config.divisions}분할</span><span>${samplingText}</span></div>
     </div>
     <div class="random-summary-grid strategy-random-grid">${cards}</div>
     <section class="random-insight-strip" aria-label="복합 성과 요약">
@@ -1784,6 +1805,7 @@ $("#runRoundStarts").addEventListener("click", runRoundStarts);
 $("#resetForm").addEventListener("click", resetForm);
 $("#refreshPrices").addEventListener("click", refreshPrices);
 $$('input[name=analysis_mode]').forEach(input => input.addEventListener("change", () => syncAnalysisMode(true)));
+$("#uniformStartSampling").addEventListener("change", () => syncUniformSamplingControls());
 [$("#backtestForm").elements.split_count, $("#backtestForm").elements.compounding_type, $("#backtestForm").elements.trigger_interval_pct, $("#backtestForm").elements.divisions]
   .filter(Boolean)
   .forEach(input => input.addEventListener("change", () => syncRandomModeCopy()));

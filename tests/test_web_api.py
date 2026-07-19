@@ -148,6 +148,25 @@ class PreviousHighWebApiTests(unittest.TestCase):
         self.assertEqual(result["config"]["divisions"], 25)
         self.assertTrue(result["methodology"]["same_period_for_all_strategies"])
 
+    def test_strategy_random_payload_supports_uniform_fixed_length_starts(self) -> None:
+        result = _run_strategy_random_payload(dict(
+            self.payload,
+            count=50,
+            min_days=2,
+            max_days=6,
+            seed=77,
+            uniform_start_sampling=True,
+            initial_entry="moc",
+        ))
+
+        self.assertEqual(result["config"]["requested_count"], 50)
+        self.assertEqual(result["config"]["count"], 5)
+        self.assertEqual(len(result["rows"]), 5)
+        self.assertEqual({row["trading_days"] for row in result["rows"]}, {2})
+        self.assertEqual(result["rows"][0]["start_date"], "2024-01-01")
+        self.assertEqual(result["rows"][-1]["start_date"], "2024-01-05")
+        self.assertTrue(result["methodology"]["sample_count_capped"])
+
     def test_background_random_job_exposes_progress_and_result(self) -> None:
         payload = dict(self.payload, count=4, min_days=2, max_days=4, seed=19, initial_entry="moc")
 
