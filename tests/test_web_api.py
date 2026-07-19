@@ -14,6 +14,7 @@ class PreviousHighWebApiTests(unittest.TestCase):
         root = Path(self.directory.name)
         self.soxx = root / "SOXX.csv"
         self.soxl = root / "SOXL.csv"
+        self.qld = root / "QLD.csv"
         dates = ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-08"]
         soxx = [(100, 100), (96, 94), (96, 96), (94, 94), (89, 89), (101, 101)]
         soxl = [20, 20, 21, 20, 18, 22]
@@ -32,6 +33,13 @@ class PreviousHighWebApiTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        self.qld.write_text(
+            header + "".join(
+                f"{date},{price},{price},{price},{price},{price},1,actual_split_adjusted\n"
+                for date, price in zip(dates, [30, 29, 30, 28, 27, 32])
+            ),
+            encoding="utf-8",
+        )
         self.payload = {
             "analysis_mode": "compare",
             "principal": "20000",
@@ -39,6 +47,7 @@ class PreviousHighWebApiTests(unittest.TestCase):
             "end_date": dates[-1],
             "soxx_csv_path": str(self.soxx),
             "soxl_csv_path": str(self.soxl),
+            "qld_csv_path": str(self.qld),
             "trigger_interval_pct": "5",
             "divisions": 20,
             "split_count": 20,
@@ -51,17 +60,18 @@ class PreviousHighWebApiTests(unittest.TestCase):
         self.assertTrue(config.fractional_shares)
         self.assertEqual(str(config.liquidation_offset_pct), "0")
 
-    def test_run_payload_returns_tagged_four_strategy_comparison(self) -> None:
+    def test_run_payload_returns_four_strategies_plus_qld_comparison(self) -> None:
         result = _run_payload(self.payload)
         self.assertEqual(result["result_type"], "comparison")
         self.assertEqual(result["schema_version"], 1)
         self.assertEqual(result["summary"]["ending_equity"], 20308.0)
         self.assertEqual(
             set(result["comparison"]["strategies"]),
-            {"previous_high", "infinite_v4", "soxx_buy_hold", "soxl_buy_hold"},
+            {"previous_high", "infinite_v4", "soxx_buy_hold", "soxl_buy_hold", "qld_buy_hold"},
         )
         self.assertEqual(result["period"]["trading_days"], 6)
         self.assertEqual(len(result["market_data"]["SOXX"]), 6)
+        self.assertEqual(len(result["market_data"]["QLD"]), 6)
         self.assertEqual(result["config"]["price_basis"], "actual_split_adjusted")
 
     def test_previous_high_single_mode_does_not_compute_hidden_comparison(self) -> None:

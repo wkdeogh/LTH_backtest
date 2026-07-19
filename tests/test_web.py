@@ -114,7 +114,7 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn("split_count: Number(raw.split_count || 20)", javascript)
         self.assertIn('fill_model: raw.fill_model || "intraday_high"', javascript)
 
-    def test_four_way_previous_high_and_sweep_visuals_are_integrated(self) -> None:
+    def test_four_strategies_plus_qld_and_sweep_visuals_are_integrated(self) -> None:
         javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
         stylesheet = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
 
@@ -122,9 +122,14 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn('id="comparisonYearSummary"', (STATIC_ROOT / "index.html").read_text(encoding="utf-8"))
         self.assertIn('annual.previous_high_over_soxx_rate', javascript)
         self.assertIn("function drawComparisonCharts()", javascript)
-        self.assertIn('const dashboardKeys = ["previous_high", "soxx_buy_hold", "soxl_buy_hold"]', javascript)
+        self.assertIn("dashboardComparison.strategy_order", javascript)
         self.assertIn("result.comparison || result.benchmarks", javascript)
         self.assertIn("function comparisonSeries(comparison", javascript)
+        self.assertIn('qld_buy_hold: { key: "qld_buy_hold", label: "QLD 거치식"', javascript)
+        self.assertIn('infinite_v4: { key: "infinite_v4", label: "무한매수법 V4", color: "#7651b8", lineWidth: 2, dash: [] }', javascript)
+        self.assertNotIn("dash: [8, 4]", javascript)
+        self.assertNotIn("dash: [3, 3]", javascript)
+        self.assertNotIn("dash: [11, 4, 2, 4]", javascript)
         self.assertIn('key: `${item.key}_drawdown`', javascript)
         self.assertIn('id="comparisonEquityLegend"', (STATIC_ROOT / "index.html").read_text(encoding="utf-8"))
         self.assertIn('id="comparisonDrawdownLegend"', (STATIC_ROOT / "index.html").read_text(encoding="utf-8"))

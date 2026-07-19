@@ -34,11 +34,12 @@ const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, char => ({ "
 const CANDLE_COLORS = Object.freeze({ rise: "#e43f45", fall: "#1976d2", flat: "#78837d" });
 const STRATEGY_SERIES = Object.freeze({
   previous_high: { key: "previous_high", label: "전고점 매매법", color: "#08775b", lineWidth: 2.7, dash: [] },
-  infinite_v4: { key: "infinite_v4", label: "무한매수법 V4", color: "#7651b8", lineWidth: 2, dash: [8, 4] },
-  soxx_buy_hold: { key: "soxx_buy_hold", label: "SOXX 거치식", color: "#2865d5", lineWidth: 2, dash: [3, 3] },
-  soxl_buy_hold: { key: "soxl_buy_hold", label: "SOXL 거치식", color: "#c43e45", lineWidth: 2, dash: [11, 4, 2, 4] },
+  infinite_v4: { key: "infinite_v4", label: "무한매수법 V4", color: "#7651b8", lineWidth: 2, dash: [] },
+  soxx_buy_hold: { key: "soxx_buy_hold", label: "SOXX 거치식", color: "#2865d5", lineWidth: 2, dash: [] },
+  soxl_buy_hold: { key: "soxl_buy_hold", label: "SOXL 거치식", color: "#c43e45", lineWidth: 2, dash: [] },
+  qld_buy_hold: { key: "qld_buy_hold", label: "QLD 거치식", color: "#d18a18", lineWidth: 2, dash: [] },
 });
-const SERIES_CLASS = Object.freeze({ previous_high: "previous-high", infinite_v4: "lth-v4", soxx_buy_hold: "soxx", soxl_buy_hold: "soxl" });
+const SERIES_CLASS = Object.freeze({ previous_high: "previous-high", infinite_v4: "lth-v4", soxx_buy_hold: "soxx", soxl_buy_hold: "soxl", qld_buy_hold: "qld" });
 
 function comparisonSeries(comparison, keys = comparison?.strategy_order || Object.keys(STRATEGY_SERIES)) {
   return keys.filter(key => STRATEGY_SERIES[key]).map(key => {
@@ -302,7 +303,7 @@ function syncAnalysisMode(refreshDatasets = true) {
   const descriptions = {
     lth_v4: "기존 무한매수법 V4를 단독으로 정밀 분석합니다.",
     previous_high: "SOXX 하락 단계마다 SOXL로 전환하고 전고점 회복 시 SOXX로 복귀합니다.",
-    compare: "SOXX·SOXL 거치식, 전고점 매매법, 무한매수법 V4를 동일 조건으로 비교합니다.",
+    compare: "전고점·무한매수 V4·SOXX·SOXL에 QLD 거치식까지 동일 조건으로 비교합니다.",
   };
   $("#analysisModeHelp").textContent = descriptions[mode];
   $("#backtestForm button[type=submit] span").textContent = mode === "compare" ? "4전략 비교 실행" : "백테스트 실행";
@@ -335,6 +336,7 @@ function formPayload() {
     csv_path: raw.csv_path,
     soxx_csv_path: raw.soxx_csv_path,
     soxl_csv_path: raw.soxl_csv_path,
+    qld_csv_path: raw.qld_csv_path,
     trigger_interval_pct: raw.trigger_interval_pct || "5",
     divisions: Number(raw.divisions || 20),
     fractional_shares: Boolean(form.elements.fractional_shares?.checked),
@@ -375,7 +377,7 @@ function renderPreviousHighOverview(result) {
   $("#emptyState").classList.add("hidden");
   $("#resultsContent").classList.remove("hidden");
   const { config, period, summary, metrics, strategy_metrics: strategy, diagnostics } = result;
-  $("#resultTitle").textContent = result.result_type === "comparison" ? "4전략 비교 · 전고점 매매법" : "전고점 매매법 결과";
+  $("#resultTitle").textContent = result.result_type === "comparison" ? "4전략 + QLD 비교 · 전고점 매매법" : "전고점 매매법 결과";
   $("#resultPeriod").textContent = `${period.start} — ${period.end} · ${Number(period.trading_days).toLocaleString()}거래일`;
   $("#fillBadge").textContent = "시가·종가 확인형";
   $("#modeBadge").textContent = `${number(config.trigger_interval_pct, 2)}% · ${config.divisions}분할`;
@@ -407,16 +409,20 @@ function renderPreviousHighOverview(result) {
     ["주문 수", `${Number(strategy.order_count || summary.order_count || 0).toLocaleString()}건`],
     ["SOXX 완전 소진", strategy.soxx_exhausted ? `있음 · ${percent(strategy.first_exhaustion_drawdown)}` : "없음"],
     ["공통 거래일", `${Number(alignment.common_row_count || period.trading_days || 0).toLocaleString()}일`],
-    ["누락 제외", `${Number((alignment.left_only_count || 0) + (alignment.right_only_count || 0)).toLocaleString()}행`],
+    ["누락 제외", `${Number((alignment.left_only_count || 0) + (alignment.right_only_count || 0) + (alignment.excluded_for_qld_count || 0)).toLocaleString()}행`],
   ]);
   $("#warningList").innerHTML = (result.warnings || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
   const dashboardComparison = result.comparison || result.benchmarks;
   if (dashboardComparison?.equity_curve?.length) {
-    const dashboardKeys = ["previous_high", "soxx_buy_hold", "soxl_buy_hold"];
+    const dashboardKeys = result.comparison
+      ? dashboardComparison.strategy_order
+      : ["previous_high", "soxx_buy_hold", "soxl_buy_hold"];
     app.equityPoints = dashboardComparison.equity_curve;
     app.chartPoints = app.equityPoints;
     app.equitySeries = comparisonSeries(dashboardComparison, dashboardKeys);
-    $("#equityChartDescription").textContent = "전고점 매매법과 SOXX·SOXL 거치식의 일별 종가 평가액을 비교합니다.";
+    $("#equityChartDescription").textContent = result.comparison
+      ? "전고점·무한매수 V4·SOXX·SOXL·QLD의 일별 종가 평가액을 비교합니다."
+      : "전고점 매매법과 SOXX·SOXL 거치식의 일별 종가 평가액을 비교합니다.";
     $("#equityLegend").innerHTML = seriesLegendHtml(app.equitySeries);
   } else {
     app.equityPoints = result.equity_curve || [];
@@ -622,6 +628,8 @@ function renderComparison(result) {
     const item = comparison.strategies[key];
     return summaryCard(item.label, money(item.summary.ending_equity), `${percent(item.summary.profit_rate, 2, true)} · MDD ${percent(item.metrics.close_mdd, 1)}`, cls(item.summary.profit_rate));
   }).join("");
+  const strategyHeaders = order.map(key => `<th class="${SERIES_CLASS[key] || ""}-text">${escapeHtml(comparison.strategies[key].label)}</th>`).join("");
+  $("#comparisonMetricHead").innerHTML = `<th>지표</th>${strategyHeaders}`;
   renderHypothesisChecks(comparison);
   const metricRows = [
     ["최종 평가금액", item => money(item.summary.ending_equity)],
@@ -640,7 +648,8 @@ function renderComparison(result) {
   ];
   $("#comparisonMetricRows").innerHTML = metricRows.map(([label, format]) => `<tr><td>${label}</td>${order.map(key => `<td>${escapeHtml(format(comparison.strategies[key]))}</td>`).join("")}</tr>`).join("");
   const yearly = comparison.yearly_returns || [];
-  $("#comparisonYearRows").innerHTML = yearly.length ? yearly.map(row => `<tr><td>${row.year}</td><td class="${cls(row.soxx_buy_hold)}">${percent(row.soxx_buy_hold, 2, true)}</td><td class="${cls(row.soxl_buy_hold)}">${percent(row.soxl_buy_hold, 2, true)}</td><td class="${cls(row.previous_high)}">${percent(row.previous_high, 2, true)}</td><td class="${cls(row.infinite_v4)}">${percent(row.infinite_v4, 2, true)}</td></tr>`).join("") : '<tr><td colspan="5">연도별 데이터가 없습니다.</td></tr>';
+  $("#comparisonYearHead").innerHTML = `<th>연도</th>${strategyHeaders}`;
+  $("#comparisonYearRows").innerHTML = yearly.length ? yearly.map(row => `<tr><td>${row.year}</td>${order.map(key => `<td class="${cls(row[key])}">${percent(row[key], 2, true)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${order.length + 1}">연도별 데이터가 없습니다.</td></tr>`;
   const annual = comparison.annual_outperformance || {};
   $("#comparisonYearSummary").innerHTML = [
     summaryCard("SOXX보다 우세한 연도", percent(annual.previous_high_over_soxx_rate, 1), `${Number(annual.previous_high_over_soxx_years || 0).toLocaleString()} / ${Number(annual.comparable_years || 0).toLocaleString()}년`),
@@ -649,7 +658,8 @@ function renderComparison(result) {
     summaryCard("SOXX 대비 최대 열위", hypothesisPoints(annual.worst_year_vs_soxx_pct_points), annual.worst_year_vs_soxx || "-", cls(annual.worst_year_vs_soxx_pct_points)),
   ].join("");
   const periods = comparison.period_analysis || [];
-  $("#comparisonRegimeRows").innerHTML = periods.length ? periods.map(row => `<tr><td>${escapeHtml(row.period)}</td><td>${row.start}</td><td>${row.end}</td><td>${percent(row.soxx_buy_hold?.total_return, 2, true)}</td><td>${percent(row.soxl_buy_hold?.total_return, 2, true)}</td><td>${percent(row.previous_high?.total_return, 2, true)}</td><td>${percent(row.infinite_v4?.total_return, 2, true)}</td></tr>`).join("") : '<tr><td colspan="7">분석 가능한 하위 구간이 없습니다.</td></tr>';
+  $("#comparisonRegimeHead").innerHTML = `<th>구간</th><th>시작</th><th>종료</th>${strategyHeaders}`;
+  $("#comparisonRegimeRows").innerHTML = periods.length ? periods.map(row => `<tr><td>${escapeHtml(row.period)}</td><td>${row.start}</td><td>${row.end}</td>${order.map(key => `<td>${percent(row[key]?.total_return, 2, true)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${order.length + 3}">분석 가능한 하위 구간이 없습니다.</td></tr>`;
   app.comparisonPoints = comparison.equity_curve || [];
   requestAnimationFrame(drawComparisonCharts);
 }

@@ -19,6 +19,7 @@
   --lth-v4: #7651b8;
   --soxx: #2865d5;
   --soxl: #c43e45;
+  --qld: #d18a18;
   --shadow: 0 12px 30px rgba(20, 35, 28, .06);
 }
 
@@ -170,10 +171,11 @@ button { color: inherit; }
 .analysis-heading p { max-width: 760px; margin: 0; color: var(--muted); font-size: 11px; }
 .series-legend { display: flex; flex-wrap: wrap; justify-content: end; gap: 11px; color: var(--muted); font-size: 10px; }
 .series-legend .series::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 5px; border-radius: 999px; vertical-align: 2px; }
-.series.previous-high::before { background: var(--previous-high); }.series.lth-v4::before { background: var(--lth-v4); }.series.soxx::before { background: var(--soxx); }.series.soxl::before { background: var(--soxl); }
+.series.previous-high::before { background: var(--previous-high); }.series.lth-v4::before { background: var(--lth-v4); }.series.soxx::before { background: var(--soxx); }.series.soxl::before { background: var(--soxl); }.series.qld::before { background: var(--qld); }
 .chart-series-legend { max-width: 520px; }.chart-head-actions { display: flex; align-items: center; justify-content: end; gap: 14px; flex-wrap: wrap; }
-.previous-high-text { color: var(--previous-high) !important; }.lth-v4-text { color: var(--lth-v4) !important; }.soxx-text { color: var(--soxx) !important; }.soxl-text { color: var(--soxl) !important; }
-.comparison-summary,.comparison-year-summary,.previous-high-summary,.sweep-stability-summary { grid-template-columns: repeat(4,minmax(155px,1fr)); margin-bottom: 12px; }
+.previous-high-text { color: var(--previous-high) !important; }.lth-v4-text { color: var(--lth-v4) !important; }.soxx-text { color: var(--soxx) !important; }.soxl-text { color: var(--soxl) !important; }.qld-text { color: var(--qld) !important; }
+.comparison-summary { grid-template-columns: repeat(5,minmax(140px,1fr)); margin-bottom: 12px; }
+.comparison-year-summary,.previous-high-summary,.sweep-stability-summary { grid-template-columns: repeat(4,minmax(155px,1fr)); margin-bottom: 12px; }
 .comparison-matrix-panel,.comparison-table-panel,.sweep-results-panel { margin-top: 14px; }
 .comparison-hypothesis-panel { margin-top: 14px; }
 .hypothesis-disclaimer { display: flex; align-items: flex-start; gap: 9px; margin: 2px 0 12px; padding: 9px 11px; border: 1px solid #d8e2dd; border-radius: 8px; background: var(--panel-soft); color: var(--muted); font-size: 10px; }

@@ -135,10 +135,18 @@ def _run_payload(payload: dict) -> dict:
             "SOXL": [right for _, right in pairs],
         }
     else:
+        qld_path = resolve_csv_path(payload.get("qld_csv_path"), "QLD")
+        qld_bars, qld_diagnostics = load_prices(
+            qld_path, str(payload["start_date"]), str(payload["end_date"]),
+        )
+        if qld_diagnostics.get("price_basis") != diagnostics["SOXX"].get("price_basis"):
+            raise ValueError("SOXX·SOXL·QLD 데이터의 가격 기준이 다릅니다. 같은 기준의 CSV를 사용하세요.")
+        diagnostics["QLD"] = qld_diagnostics
         result = run_strategy_comparison(
             previous_config,
             soxx_bars,
             soxl_bars,
+            qld_prices=qld_bars,
             v4_split_count=int(payload.get("split_count", 20)),
             v4_compounding_type=str(payload.get("compounding_type", "compound")),
             v4_sell_percent=decimal(payload["sell_percent"]) if payload.get("sell_percent") not in (None, "") else None,
@@ -151,7 +159,7 @@ def _run_payload(payload: dict) -> dict:
     actual_start = str(result["period"]["start"])
     if actual_start > str(payload["start_date"]):
         result["warnings"].append(
-            f"요청 시작일 {payload['start_date']}보다 SOXX·SOXL 공통 데이터가 늦어 {actual_start}부터 계산했습니다."
+            f"요청 시작일 {payload['start_date']}보다 비교 종목 공통 데이터가 늦어 {actual_start}부터 계산했습니다."
         )
     return to_primitive(result)
 

@@ -165,14 +165,20 @@ def _previous_prices(args: argparse.Namespace) -> tuple[list, list, dict]:
 
 def command_previous_high(args: argparse.Namespace) -> object:
     soxx, soxl, diagnostics = _previous_prices(args)
+    qld_path = resolve_csv_path(args.qld_csv, "QLD")
+    qld, qld_diagnostics = load_prices(qld_path, args.start_date, args.end_date)
+    if qld_diagnostics.get("price_basis") != diagnostics["SOXX"].get("price_basis"):
+        raise ValueError("SOXX·SOXL·QLD 데이터의 가격 기준이 다릅니다.")
+    diagnostics["QLD"] = qld_diagnostics
     result = run_strategy_comparison(
         _previous_config(args), soxx, soxl,
+        qld_prices=qld,
         v4_split_count=args.v4_split_count,
         result_type="comparison",
         data_diagnostics=diagnostics,
     )
-    print("\n전고점매매법 · 4전략 비교")
-    print("==========================")
+    print("\n전고점매매법 · 4전략 + QLD 거치식 비교")
+    print("=======================================")
     print(f"기간: {result['period']['start']} ~ {result['period']['end']} ({result['period']['trading_days']:,} 공통 거래일)")
     for key in result["comparison"]["strategy_order"]:
         strategy = result["comparison"]["strategies"][key]
@@ -302,8 +308,9 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--json-out")
         target.add_argument("--csv-out-dir")
 
-    previous = sub.add_parser("previous-high", aliases=["ph"], help="전고점매매법과 4전략 비교")
+    previous = sub.add_parser("previous-high", aliases=["ph"], help="전고점매매법 4전략과 QLD 거치식 비교")
     add_previous_high_options(previous)
+    previous.add_argument("--qld-csv")
     previous.add_argument("--v4-split-count", type=int, choices=[20, 30, 40], default=20)
     previous.add_argument("--html-out")
     previous.set_defaults(func=command_previous_high)

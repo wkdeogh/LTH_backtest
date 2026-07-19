@@ -161,6 +161,7 @@ def _render_previous_high_comparison_html_report(result: object) -> str:
     strategy_metrics = data["strategy_metrics"]
     period = data["period"]
     comparison = data["comparison"]
+    comparison_name = "4전략 + QLD 거치식" if "qld_buy_hold" in comparison["strategy_order"] else "4전략"
     price_basis_copy = html.escape(_price_basis_copy(data))
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("<", "\\u003c")
 
@@ -205,13 +206,13 @@ def _render_previous_high_comparison_html_report(result: object) -> str:
         metric_rows.append(f"<tr><th>{html.escape(label)}</th>{''.join(values)}</tr>")
     warning_html = "".join(f"<li>{html.escape(item)}</li>" for item in data.get("warnings", []))
     return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>전고점매매법 · 4전략 비교 리포트</title><style>
+<title>전고점매매법 · {comparison_name} 비교 리포트</title><style>
 :root{{--bg:#f4f7f5;--panel:#fff;--ink:#15251d;--muted:#617068;--line:#dce5df;--green:#08775b}}*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 Arial,"Malgun Gothic",sans-serif}}header{{padding:28px max(24px,calc((100vw - 1380px)/2));background:#10271f;color:#fff}}h1{{margin:0 0 6px;font-size:27px}}header p{{margin:0;color:#c9d7d1}}main{{max-width:1380px;margin:auto;padding:22px}}.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}}article,.panel{{background:#fff;border:1px solid var(--line);border-radius:11px;padding:15px}}article span{{display:block;color:var(--muted)}}article strong{{display:block;font-size:21px;margin-top:5px}}.panel{{margin-top:14px}}h2{{font-size:17px;margin:0 0 11px}}canvas{{display:block;width:100%;height:360px}}.table{{overflow:auto;max-height:560px}}table{{border-collapse:collapse;width:100%;min-width:940px}}th,td{{padding:8px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}}th{{background:#eef3f0}}thead th{{position:sticky;top:0}}th:first-child,td:first-child{{text-align:left}}ul{{margin:0;padding-left:20px}}.legend{{display:flex;gap:16px;margin-bottom:8px;color:var(--muted)}}.legend i{{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle}}
-</style></head><body><header><h1>전고점매매법 · 4전략 비교</h1><p>{period['start']} ~ {period['end']} · {period['trading_days']:,} 공통 거래일 · {price_basis_copy}</p></header><main>
+</style></head><body><header><h1>전고점매매법 · {comparison_name} 비교</h1><p>{period['start']} ~ {period['end']} · {period['trading_days']:,} 공통 거래일 · {price_basis_copy}</p></header><main>
 <section class="cards">{card_html}</section>
 <section class="panel"><h2>핵심 성과 비교</h2><div class="table"><table><thead><tr><th>지표</th>{strategy_headers}</tr></thead><tbody>{''.join(metric_rows)}</tbody></table></div></section>
-<section class="panel"><h2>4전략 자산곡선</h2><div class="legend" id="legend"></div><canvas id="equity" width="1300" height="360"></canvas></section>
-<section class="panel"><h2>4전략 종가 낙폭</h2><canvas id="drawdown" width="1300" height="360"></canvas></section>
+<section class="panel"><h2>{comparison_name} 자산곡선</h2><div class="legend" id="legend"></div><canvas id="equity" width="1300" height="360"></canvas></section>
+<section class="panel"><h2>{comparison_name} 종가 낙폭</h2><canvas id="drawdown" width="1300" height="360"></canvas></section>
 <section class="panel"><h2>SOXL 비중과 실질 레버리지</h2><canvas id="exposure" width="1300" height="360"></canvas></section>
 <section class="panel"><h2>낙폭별 포트폴리오 구조</h2><div class="table"><table id="buckets"></table></div></section>
 <section class="panel"><h2>전고점 라운드</h2><div class="table"><table id="rounds"></table></div></section>

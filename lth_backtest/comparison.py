@@ -16,6 +16,7 @@ STRATEGY_META = {
     "infinite_v4": {"label": "무한매수법 V4", "color": "#7651b8"},
     "soxx_buy_hold": {"label": "SOXX Buy & Hold", "color": "#2865d5"},
     "soxl_buy_hold": {"label": "SOXL Buy & Hold", "color": "#c43e45"},
+    "qld_buy_hold": {"label": "QLD Buy & Hold", "color": "#d18a18"},
 }
 HOLD_BENCHMARK_ORDER = ("previous_high", "soxx_buy_hold", "soxl_buy_hold")
 
@@ -161,7 +162,11 @@ def _slice_metrics(rows: list[dict], key: str, risk_free: Decimal) -> dict | Non
     return metrics
 
 
-def _period_comparison(rows: list[dict], risk_free: Decimal) -> list[dict]:
+def _period_comparison(
+    rows: list[dict],
+    risk_free: Decimal,
+    strategy_keys: tuple[str, ...] | list[str],
+) -> list[dict]:
     if len(rows) < 2:
         return []
     boundaries = [0, len(rows) // 3, (len(rows) * 2) // 3, len(rows)]
@@ -212,7 +217,7 @@ def _period_comparison(rows: list[dict], risk_free: Decimal) -> list[dict]:
             "end": segment[-1]["date"],
             "recovered": recovered,
         }
-        for key in STRATEGY_META:
+        for key in strategy_keys:
             metrics = _slice_metrics(segment, key, risk_free)
             item[key] = {
                 "total_return": metrics["total_return"],
@@ -298,6 +303,7 @@ def run_strategy_comparison(
     soxx_prices: list[PriceBar],
     soxl_prices: list[PriceBar],
     *,
+    qld_prices: list[PriceBar] | None = None,
     v4_split_count: int = 20,
     v4_compounding_type: str = "compound",
     v4_sell_percent: Decimal | None = None,
@@ -307,7 +313,28 @@ def run_strategy_comparison(
     result_type: str = "comparison",
     data_diagnostics: dict | None = None,
 ) -> dict:
-    pairs, alignment = align_price_series(soxx_prices, soxl_prices, "SOXX", "SOXL")
+    pairs, soxx_soxl_alignment = align_price_series(soxx_prices, soxl_prices, "SOXX", "SOXL")
+    qld_alignment = None
+    common_qld: list[PriceBar] = []
+    if qld_prices is not None:
+        pair_by_date = {left.date: (left, right) for left, right in pairs}
+        qld_pairs, qld_alignment = align_price_series(
+            [left for left, _ in pairs], qld_prices, "SOXX·SOXL 공통 데이터", "QLD",
+        )
+        pairs = [pair_by_date[left.date] for left, _ in qld_pairs]
+        common_qld = [qld for _, qld in qld_pairs]
+
+    alignment = dict(soxx_soxl_alignment)
+    if qld_alignment is not None:
+        alignment.update({
+            "symbols": ["SOXX", "SOXL", "QLD"],
+            "common_row_count": len(pairs),
+            "common_start_date": pairs[0][0].date,
+            "common_end_date": pairs[-1][0].date,
+            "soxx_soxl_common_row_count": soxx_soxl_alignment["common_row_count"],
+            "excluded_for_qld_count": qld_alignment["left_only_count"],
+            "qld_outside_soxx_soxl_count": qld_alignment["right_only_count"],
+        })
     common_soxx = [left for left, _ in pairs]
     common_soxl = [right for _, right in pairs]
     previous = run_previous_high_backtest(previous_config, common_soxx, common_soxl, data_diagnostics)
@@ -356,15 +383,19 @@ def run_strategy_comparison(
         "soxx_buy_hold": soxx_hold,
         "soxl_buy_hold": soxl_hold,
     }
+    if qld_prices is not None:
+        strategy_results["qld_buy_hold"] = _buy_and_hold(
+            "QLD", common_qld, previous_config.principal, previous_config.fractional_shares,
+            previous_config.slippage_bps, previous_config.commission,
+            previous_config.annual_risk_free_rate,
+        )
     strategies = {
         key: _strategy_payload(key, value["summary"], value["metrics"])
         for key, value in strategy_results.items()
     }
     maps = {
-        "previous_high": {row["date"]: row for row in previous["equity_curve"]},
-        "infinite_v4": {row["date"]: row for row in v4.equity_curve},
-        "soxx_buy_hold": {row["date"]: row for row in soxx_hold["equity_curve"]},
-        "soxl_buy_hold": {row["date"]: row for row in soxl_hold["equity_curve"]},
+        key: {row["date"]: row for row in value["equity_curve"]}
+        for key, value in strategy_results.items()
     }
     comparison_curve: list[dict] = []
     for soxx, _ in pairs:
@@ -401,7 +432,11 @@ def run_strategy_comparison(
     soxl_mdd = decimal(soxl_hold["metrics"]["close_mdd"])
     previous_mdd = decimal(previous["metrics"]["close_mdd"])
     v4_return = decimal(v4_metrics["total_return"])
-    period_analysis = _period_comparison(comparison_curve, previous_config.annual_risk_free_rate)
+    period_analysis = _period_comparison(
+        comparison_curve,
+        previous_config.annual_risk_free_rate,
+        list(strategy_results),
+    )
     hypothesis_checks = [
         {"id": 1, "label": "전고점매매법 총수익률이 V4보다 높은가", "passed": previous_return > v4_return, "difference_pct_points": round_rate(previous_return - v4_return)},
         {"id": 2, "label": "전고점매매법이 SOXX보다 초과수익을 냈는가", "passed": previous_return > soxx_return, "difference_pct_points": round_rate(previous_return - soxx_return)},
@@ -410,7 +445,7 @@ def run_strategy_comparison(
         _round_recovery_hypothesis(previous),
     ]
     comparison = {
-        "strategy_order": list(STRATEGY_META),
+        "strategy_order": list(strategy_results),
         "strategies": strategies,
         "equity_curve": comparison_curve,
         "yearly_returns": yearly_rows,
@@ -439,6 +474,8 @@ def run_strategy_comparison(
         "SOXX": [asdict(item) for item in common_soxx],
         "SOXL": [asdict(item) for item in common_soxl],
     }
+    if qld_prices is not None:
+        previous["market_data"]["QLD"] = [asdict(item) for item in common_qld]
     previous["config"]["v4_split_count"] = v4_split_count
     previous["config"]["v4_compounding_type"] = v4_compounding_type
     previous["config"]["v4_sell_percent"] = v4_sell_percent
@@ -447,6 +484,16 @@ def run_strategy_comparison(
     previous["config"]["v4_initial_entry"] = v4_initial_entry
     previous["config"]["v4_first_buy_buffer_percent"] = v4_first_buy_buffer_percent
     previous["diagnostics"]["comparison_alignment"] = alignment
+    if qld_alignment is not None:
+        previous["warnings"] = [
+            item.replace("SOXX와 SOXL의 공통 거래일", "SOXX·SOXL·QLD의 공통 거래일")
+            for item in previous["warnings"]
+        ]
+        previous["diagnostics"]["qld_alignment"] = qld_alignment
+        if qld_alignment["left_only_count"]:
+            previous["warnings"].append(
+                f"QLD가 없는 {qld_alignment['left_only_count']:,}개 거래일은 5개 비교선 모두에서 제외했습니다."
+            )
     if previous_config.fractional_shares:
         previous["warnings"].append(
             "소수점 수량 옵션은 전고점매매법과 Buy & Hold 비교선에만 적용됩니다. "

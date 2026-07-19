@@ -194,12 +194,12 @@
 
         <section class="tab-page hidden" id="tab-comparison" data-analysis-modes="compare">
           <div class="analysis-heading">
-            <div><span class="eyebrow">FOUR-WAY COMPARISON</span><h2>동일 조건 4전략 비교</h2><p>같은 초기자본·거래일·비용 조건으로 SOXX, SOXL, 전고점 매매법, 무한매수법 V4를 비교합니다.</p></div>
+            <div><span class="eyebrow">FOUR STRATEGIES + QLD</span><h2>동일 조건 4전략 + QLD 비교</h2><p>같은 초기자본·거래일·비용 조건으로 전고점 매매법, 무한매수법 V4, SOXX·SOXL·QLD 거치식을 비교합니다.</p></div>
             <div class="series-legend" id="comparisonLegend" aria-label="비교 전략 범례">
-              <span class="series previous-high">전고점 매매법</span><span class="series lth-v4">무한매수 V4</span><span class="series soxx">SOXX</span><span class="series soxl">SOXL</span>
+              <span class="series previous-high">전고점 매매법</span><span class="series lth-v4">무한매수 V4</span><span class="series soxx">SOXX</span><span class="series soxl">SOXL</span><span class="series qld">QLD</span>
             </div>
           </div>
-          <div class="empty-mini" id="comparisonEmpty">4전략 비교 모드로 백테스트를 실행하면 성과표와 비교 차트가 표시됩니다.</div>
+          <div class="empty-mini" id="comparisonEmpty">4전략 비교 모드로 백테스트를 실행하면 QLD를 포함한 성과표와 비교 차트가 표시됩니다.</div>
           <div class="hidden" id="comparisonResults">
             <div class="summary-grid comparison-summary" id="comparisonSummary"></div>
             <article class="panel comparison-hypothesis-panel" aria-labelledby="comparisonHypothesisTitle">
@@ -209,26 +209,26 @@
             </article>
             <article class="panel comparison-matrix-panel">
               <div class="panel-head"><div><h3>핵심 성과지표</h3><p>수익·낙폭·변동성·연도별 성과를 동일 기준으로 비교합니다.</p></div></div>
-              <div class="data-table comparison-matrix-table"><table id="comparisonMetricTable"><thead><tr id="comparisonMetricHead"><th>지표</th><th class="previous-high-text">전고점 매매법</th><th class="lth-v4-text">무한매수 V4</th><th class="soxx-text">SOXX</th><th class="soxl-text">SOXL</th></tr></thead><tbody id="comparisonMetricRows"></tbody></table></div>
+              <div class="data-table comparison-matrix-table"><table id="comparisonMetricTable"><thead><tr id="comparisonMetricHead"><th>지표</th><th class="previous-high-text">전고점 매매법</th><th class="lth-v4-text">무한매수 V4</th><th class="soxx-text">SOXX</th><th class="soxl-text">SOXL</th><th class="qld-text">QLD</th></tr></thead><tbody id="comparisonMetricRows"></tbody></table></div>
             </article>
             <div class="analysis-chart-stack comparison-chart-stack">
               <article class="panel analysis-chart-panel">
-                <div class="panel-head"><div><h3>4전략 자산 곡선</h3><p>일별 종가 평가금액을 함께 표시합니다.</p></div><div class="chart-head-actions"><label class="chart-toggle"><input id="comparisonEquityLogScale" type="checkbox"><span>로그 축</span></label><div class="series-legend chart-series-legend" id="comparisonEquityLegend"></div></div></div>
-                <div class="analysis-chart-wrap"><canvas id="comparisonEquityChart" role="img" aria-label="4전략 자산 곡선 비교"></canvas><div class="chart-tooltip hidden" id="comparisonEquityTooltip"></div></div>
+                <div class="panel-head"><div><h3>4전략 + QLD 자산 곡선</h3><p>다섯 비교선의 일별 종가 평가금액을 함께 표시합니다.</p></div><div class="chart-head-actions"><label class="chart-toggle"><input id="comparisonEquityLogScale" type="checkbox"><span>로그 축</span></label><div class="series-legend chart-series-legend" id="comparisonEquityLegend"></div></div></div>
+                <div class="analysis-chart-wrap"><canvas id="comparisonEquityChart" role="img" aria-label="4전략과 QLD 자산 곡선 비교"></canvas><div class="chart-tooltip hidden" id="comparisonEquityTooltip"></div></div>
               </article>
               <article class="panel analysis-chart-panel">
-                <div class="panel-head"><div><h3>4전략 Drawdown</h3><p>각 전략의 종가 기준 고점 대비 낙폭을 비교합니다.</p></div><div class="series-legend chart-series-legend" id="comparisonDrawdownLegend"></div></div>
-                <div class="analysis-chart-wrap"><canvas id="comparisonDrawdownChart" role="img" aria-label="4전략 낙폭 비교"></canvas><div class="chart-tooltip hidden" id="comparisonDrawdownTooltip"></div></div>
+                <div class="panel-head"><div><h3>4전략 + QLD Drawdown</h3><p>각 비교선의 종가 기준 고점 대비 낙폭을 비교합니다.</p></div><div class="series-legend chart-series-legend" id="comparisonDrawdownLegend"></div></div>
+                <div class="analysis-chart-wrap"><canvas id="comparisonDrawdownChart" role="img" aria-label="4전략과 QLD 낙폭 비교"></canvas><div class="chart-tooltip hidden" id="comparisonDrawdownTooltip"></div></div>
               </article>
             </div>
             <article class="panel comparison-table-panel">
               <div class="panel-head"><div><h3>연도별 성과</h3><p>한 해 동안의 수익률과 전략별 우위를 비교합니다.</p></div></div>
               <div class="summary-grid comparison-year-summary" id="comparisonYearSummary"></div>
-              <div class="data-table comparison-wide-table"><table id="comparisonYearTable"><thead><tr id="comparisonYearHead"><th>연도</th><th>SOXX</th><th>SOXL</th><th>전고점 매매법</th><th>무한매수법 V4</th></tr></thead><tbody id="comparisonYearRows"></tbody></table></div>
+              <div class="data-table comparison-wide-table"><table id="comparisonYearTable"><thead><tr id="comparisonYearHead"><th>연도</th><th>전고점 매매법</th><th>무한매수법 V4</th><th>SOXX</th><th>SOXL</th><th>QLD</th></tr></thead><tbody id="comparisonYearRows"></tbody></table></div>
             </article>
             <article class="panel comparison-table-panel">
               <div class="panel-head"><div><h3>기간·시장 국면별 검증</h3><p>전체·초기·중간·최근 구간과 주요 하락장의 성과를 분리해 확인합니다.</p></div></div>
-              <div class="data-table comparison-wide-table"><table id="comparisonRegimeTable"><thead><tr id="comparisonRegimeHead"><th>구간</th><th>시작</th><th>종료</th><th>SOXX</th><th>SOXL</th><th>전고점</th><th>무한매수 V4</th></tr></thead><tbody id="comparisonRegimeRows"></tbody></table></div>
+              <div class="data-table comparison-wide-table"><table id="comparisonRegimeTable"><thead><tr id="comparisonRegimeHead"><th>구간</th><th>시작</th><th>종료</th><th>전고점</th><th>무한매수 V4</th><th>SOXX</th><th>SOXL</th><th>QLD</th></tr></thead><tbody id="comparisonRegimeRows"></tbody></table></div>
             </article>
           </div>
         </section>
