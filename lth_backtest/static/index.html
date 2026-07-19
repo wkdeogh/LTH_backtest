@@ -92,7 +92,8 @@
               <label class="field"><span>종료일</span><input name="end_date" id="endDate" type="date" required></label>
             </div>
             <div class="date-range-control" id="dateRangeControl">
-              <div class="date-range-head"><span>전체 거래일 범위</span><strong id="dateRangeBounds">불러오는 중</strong></div>
+              <div class="date-range-head"><span>전체 거래일 범위</span><button type="button" class="random-range-button" id="randomizeDateRange" title="전체 거래일에서 시작일과 종료일을 무작위로 선택합니다" disabled>↻ 랜덤 설정</button></div>
+              <strong class="date-range-bounds" id="dateRangeBounds">불러오는 중</strong>
               <div class="dual-range" id="dualDateRange">
                 <div class="range-rail"><div class="range-selected" id="dateRangeSelected"></div></div>
                 <input id="dateRangeStart" type="range" min="0" max="1" value="0" aria-label="분석 시작 거래일">

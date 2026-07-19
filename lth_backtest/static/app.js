@@ -78,6 +78,7 @@ function setLoading(active, message = "정밀 계산 중입니다") {
   $("#backtestForm button[type=submit]").disabled = active;
   $("#runRoundStarts").disabled = active;
   $("#refreshPrices").disabled = active;
+  $("#randomizeDateRange").disabled = active || app.dateRangeDates.length < 2;
   if ($("#runParameterSweep")) $("#runParameterSweep").disabled = active;
 }
 
@@ -183,16 +184,33 @@ function syncDateRangeFromInputs(changed) {
   renderDateRange(startIndex, endIndex);
 }
 
+function randomizeDateRange() {
+  const dates = app.dateRangeDates;
+  if (dates.length < 2) {
+    toast("랜덤 기간을 설정하려면 거래일 데이터가 필요합니다.", true);
+    return;
+  }
+  const firstIndex = Math.floor(Math.random() * dates.length);
+  let secondIndex = Math.floor(Math.random() * (dates.length - 1));
+  if (secondIndex >= firstIndex) secondIndex += 1;
+  const startIndex = Math.min(firstIndex, secondIndex);
+  const endIndex = Math.max(firstIndex, secondIndex);
+  renderDateRange(startIndex, endIndex);
+  toast(`랜덤 기간: ${dates[startIndex]} ~ ${dates[endIndex]} · ${(endIndex - startIndex + 1).toLocaleString()}거래일`);
+}
+
 function configureDateRange(dataset) {
   const dates = Array.isArray(dataset?.dates) ? dataset.dates : [];
   app.dateRangeDates = dates;
   const control = $("#dateRangeControl");
   const startRange = $("#dateRangeStart"), endRange = $("#dateRangeEnd");
+  const randomButton = $("#randomizeDateRange");
   const startDate = $("#startDate"), endDate = $("#endDate");
   const disabled = dates.length < 2;
   control.classList.toggle("disabled", disabled);
   startRange.disabled = disabled;
   endRange.disabled = disabled;
+  randomButton.disabled = disabled;
 
   if (disabled) {
     startDate.removeAttribute("min"); startDate.removeAttribute("max");
@@ -1449,6 +1467,7 @@ $("#soxxCsvPath").addEventListener("change", () => configureDateRange(refreshPre
 $("#soxlCsvPath").addEventListener("change", () => configureDateRange(refreshPreviousHighDatasetChoices(false)));
 $("#dateRangeStart").addEventListener("input", () => syncDateRangeFromSlider("start"));
 $("#dateRangeEnd").addEventListener("input", () => syncDateRangeFromSlider("end"));
+$("#randomizeDateRange").addEventListener("click", randomizeDateRange);
 $("#startDate").addEventListener("change", () => syncDateRangeFromInputs("start"));
 $("#endDate").addEventListener("change", () => syncDateRangeFromInputs("end"));
 $$('.tab').forEach(button => button.addEventListener("click", () => activateTab(button.dataset.tab)));
