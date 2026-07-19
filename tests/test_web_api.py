@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
-from lth_backtest.web import _previous_high_config, _run_payload, _run_strategy_random_payload, _run_sweep_payload
+from lth_backtest.web import (
+    _previous_high_config,
+    _random_job_snapshot,
+    _run_payload,
+    _run_strategy_random_payload,
+    _run_sweep_payload,
+    _start_random_job,
+)
 
 
 class PreviousHighWebApiTests(unittest.TestCase):
@@ -139,6 +147,27 @@ class PreviousHighWebApiTests(unittest.TestCase):
         self.assertEqual(result["config"]["trigger_interval_pct"], 4.0)
         self.assertEqual(result["config"]["divisions"], 25)
         self.assertTrue(result["methodology"]["same_period_for_all_strategies"])
+
+    def test_background_random_job_exposes_progress_and_result(self) -> None:
+        payload = dict(self.payload, count=4, min_days=2, max_days=4, seed=19, initial_entry="moc")
+
+        started = _start_random_job(payload)
+        snapshot = started
+        deadline = time.monotonic() + 3
+        while snapshot["status"] not in {"completed", "failed"} and time.monotonic() < deadline:
+            time.sleep(0.01)
+            snapshot = _random_job_snapshot(started["job_id"])
+
+        self.assertEqual(snapshot["status"], "completed", snapshot.get("error"))
+        self.assertEqual(snapshot["completed"], 4)
+        self.assertEqual(snapshot["total"], 4)
+        self.assertEqual(snapshot["progress_pct"], 100.0)
+        self.assertEqual(snapshot["result"]["result_type"], "strategy_random_comparison")
+        self.assertEqual(len(snapshot["result"]["rows"]), 4)
+
+    def test_background_random_job_rejects_more_than_five_thousand_samples(self) -> None:
+        with self.assertRaisesRegex(ValueError, "1~5,000"):
+            _start_random_job(dict(self.payload, count=5001))
 
     def test_mixed_price_basis_is_rejected(self) -> None:
         text = self.soxl.read_text(encoding="utf-8").replace("actual_split_adjusted", "user_provided")

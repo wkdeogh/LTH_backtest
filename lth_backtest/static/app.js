@@ -13,6 +13,7 @@ const app = {
   comparisonPoints: [],
   sweepResult: null,
   randomResult: null,
+  randomJob: null,
   roundStartResult: null,
   roundStartLimit: 200,
   roundStartTimelineHover: null,
@@ -332,7 +333,7 @@ function syncRandomModeCopy(mode = selectedAnalysisMode()) {
     : "동일 기간의 전략, 종목 거치식, QLD를 비교합니다.";
   const sampleInput = $("#randomForm")?.elements.count;
   if (sampleInput) {
-    sampleInput.max = compare ? "500" : "2000";
+    sampleInput.max = "5000";
     if (Number(sampleInput.value) > Number(sampleInput.max)) sampleInput.value = sampleInput.max;
   }
   if (!form) return;
@@ -1410,10 +1411,58 @@ async function runRandom(event) {
   const strategyComparison = selectedAnalysisMode() === "compare";
   if (!strategyComparison && (!symbols.length || !splits.length)) return toast("랜덤 비교 종목과 분할 수를 선택하세요.", true);
   const body = { ...main, symbols, splits, count: Number(raw.get("count")), min_days: Number(raw.get("min_days")), max_days: raw.get("max_days") || null, seed: raw.get("seed") || null };
-  setLoading(true, strategyComparison ? "같은 랜덤 기간에서 6전략을 반복 계산 중입니다" : "랜덤 기간을 반복 계산 중입니다");
-  try { app.randomResult = await api("/api/random", body); renderRandom(app.randomResult); toast(strategyComparison ? "6전략 랜덤 비교가 완료되었습니다." : "랜덤 비교가 완료되었습니다."); }
-  catch (error) { toast(error.message, true); }
-  finally { setLoading(false); }
+  setRandomRunning(true);
+  try {
+    app.randomJob = await api("/api/random/jobs", body);
+    renderRandomProgress(app.randomJob, strategyComparison);
+    while (!['completed', 'failed'].includes(app.randomJob.status)) {
+      await new Promise(resolve => setTimeout(resolve, 400));
+      app.randomJob = await api(`/api/random/jobs/${app.randomJob.job_id}`);
+      renderRandomProgress(app.randomJob, strategyComparison);
+    }
+    if (app.randomJob.status === "failed") throw new Error(app.randomJob.error || "랜덤 비교에 실패했습니다.");
+    app.randomResult = app.randomJob.result;
+    renderRandom(app.randomResult);
+    toast(strategyComparison ? "6전략 랜덤 비교가 완료되었습니다." : "랜덤 비교가 완료되었습니다.");
+  }
+  catch (error) {
+    $("#randomResults").innerHTML = `<div class="empty-mini"><strong>랜덤 비교를 완료하지 못했습니다.</strong><br>${escapeHtml(error.message)}</div>`;
+    toast(error.message, true);
+  }
+  finally { setRandomRunning(false); }
+}
+
+function setRandomRunning(active) {
+  const button = $("#randomForm button[type=submit]");
+  if (!button) return;
+  button.disabled = active;
+  button.textContent = active ? "랜덤 비교 계산 중…" : "랜덤 비교 실행";
+  $("#randomForm").classList.toggle("is-running", active);
+}
+
+function durationText(seconds) {
+  if (seconds == null || !Number.isFinite(Number(seconds))) return "계산 중";
+  const value = Math.max(0, Math.round(Number(seconds)));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const remainder = value % 60;
+  return [hours ? `${hours}시간` : "", minutes ? `${minutes}분` : "", `${remainder}초`].filter(Boolean).join(" ");
+}
+
+function renderRandomProgress(job, strategyComparison) {
+  const progress = Math.max(0, Math.min(100, Number(job.progress_pct || 0)));
+  const context = job.context || {};
+  const detail = context.start_date
+    ? `${context.start_date} ~ ${context.end_date} · ${Number(context.trading_days || 0).toLocaleString()}거래일`
+    : context.symbol ? `${context.symbol} · ${context.split_count}분할 · ${context.sample}번 구간` : "";
+  const statusLabel = job.phase === "loading" || job.phase === "queued" ? "데이터 준비" : job.phase === "summarizing" ? "결과 요약" : "백테스트 계산";
+  $("#randomResults").innerHTML = `<article class="panel random-progress-panel" aria-live="polite">
+    <div class="random-progress-head"><div><span class="eyebrow">BACKGROUND ANALYSIS</span><h2>${strategyComparison ? "6전략 랜덤 비교" : "무한매수 랜덤 비교"} 진행 중</h2><p>${escapeHtml(job.message || "랜덤 기간을 계산하고 있습니다.")}</p></div><strong>${number(progress, 1)}%</strong></div>
+    <div class="random-progress-track" role="progressbar" aria-label="랜덤 비교 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div>
+    <div class="random-progress-stats"><span><small>단계</small><strong>${statusLabel}</strong></span><span><small>완료</small><strong>${Number(job.completed || 0).toLocaleString()} / ${Number(job.total || 0).toLocaleString()}</strong></span><span><small>경과시간</small><strong>${durationText(job.elapsed_seconds)}</strong></span><span><small>예상 남은 시간</small><strong>${durationText(job.eta_seconds)}</strong></span></div>
+    ${detail ? `<p class="random-progress-detail">최근 완료 구간 · ${escapeHtml(detail)}</p>` : ""}
+    <p class="random-progress-note">이 계산은 서버에서 계속 진행됩니다. 결과가 클수록 완료 후 표를 그리는 데도 잠시 시간이 걸릴 수 있습니다.</p>
+  </article>`;
 }
 
 function renderRandom(result) {

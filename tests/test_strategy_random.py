@@ -74,9 +74,24 @@ class StrategyRandomComparisonTests(unittest.TestCase):
     def test_seeded_result_is_deterministic(self) -> None:
         self.assertEqual(self.execute(), self.execute())
 
+    def test_progress_callback_reports_every_completed_sample(self) -> None:
+        updates: list[tuple[int, int, str]] = []
+
+        result = self.execute(
+            count=4,
+            progress_callback=lambda completed, total, context: updates.append(
+                (completed, total, context["phase"])
+            ),
+        )
+
+        self.assertEqual(len(result["rows"]), 4)
+        self.assertEqual(updates[0], (0, 4, "sampling"))
+        self.assertEqual([item[0] for item in updates if item[2] == "backtesting"], [1, 2, 3, 4])
+        self.assertEqual(updates[-1], (4, 4, "summarizing"))
+
     def test_invalid_sample_limits_are_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "1~500"):
-            self.execute(count=501)
+        with self.assertRaisesRegex(ValueError, "1~5,000"):
+            self.execute(count=5001)
         with self.assertRaisesRegex(ValueError, "최소 거래일"):
             self.execute(min_days=1)
         with self.assertRaisesRegex(ValueError, "공통 데이터"):

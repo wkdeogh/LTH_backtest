@@ -4,6 +4,7 @@ import csv
 import json
 import mimetypes
 import threading
+import time
 import webbrowser
 from dataclasses import replace
 from datetime import date
@@ -12,6 +13,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
+from uuid import uuid4
 
 from .data import DATA_ROOT, PACKAGE_ROOT, PRICE_BASIS_ACTUAL, align_price_series, download_all_prices, load_prices, resolve_csv_path
 from .comparison import run_previous_high_hold_benchmarks, run_strategy_comparison
@@ -23,10 +25,13 @@ from .previous_high import PreviousHighConfig, run_previous_high_backtest
 from .random_compare import run_random_comparison
 from .reporting import render_html_report
 from .round_analysis import run_round_start_analysis
-from .strategy_random import run_strategy_random_comparison
+from .strategy_random import MAX_STRATEGY_RANDOM_SAMPLES, run_strategy_random_comparison
 
 
 STATIC_ROOT = PACKAGE_ROOT / "static"
+RANDOM_JOB_LIMIT = 20
+_RANDOM_JOBS: dict[str, dict] = {}
+_RANDOM_JOBS_LOCK = threading.Lock()
 
 
 def _config(payload: dict, fill_model: str | None = None) -> BacktestConfig:
@@ -195,7 +200,7 @@ def _run_sweep_payload(payload: dict) -> dict:
     ))
 
 
-def _run_strategy_random_payload(payload: dict) -> dict:
+def _run_strategy_random_payload(payload: dict, progress_callback=None) -> dict:
     soxx_bars, soxl_bars, diagnostics = _load_previous_high_inputs(payload)
     tqqq_bars, qld_bars = _load_comparison_benchmarks(payload, diagnostics)
     return run_strategy_random_comparison(
@@ -215,7 +220,136 @@ def _run_strategy_random_payload(payload: dict) -> dict:
         v4_initial_entry=str(payload.get("initial_entry", "web_loc")),
         v4_first_buy_buffer_percent=decimal(payload.get("first_buy_buffer_percent", "12")),
         data_diagnostics=diagnostics,
+        progress_callback=progress_callback,
     )
+
+
+def _run_random_payload(payload: dict, progress_callback=None) -> dict:
+    if str(payload.get("analysis_mode", "lth_v4")) == "compare":
+        return _run_strategy_random_payload(payload, progress_callback)
+    csv_dir = Path(payload["csv_dir"]).expanduser() if payload.get("csv_dir") else None
+    return run_random_comparison(
+        symbols=[str(item) for item in payload.get("symbols", ["TQQQ", "SOXL"])],
+        splits=[int(item) for item in payload.get("splits", [20, 40])],
+        principal=decimal(payload.get("principal", "20000")),
+        start_date=str(payload["start_date"]),
+        end_date=str(payload["end_date"]),
+        count=int(payload.get("count", 100)),
+        min_days=int(payload.get("min_days", 60)),
+        max_days=int(payload["max_days"]) if payload.get("max_days") not in (None, "") else None,
+        seed=int(payload["seed"]) if payload.get("seed") not in (None, "") else None,
+        csv_dir=csv_dir,
+        compounding_type=str(payload.get("compounding_type", "compound")),
+        sell_percent=decimal(payload["sell_percent"]) if payload.get("sell_percent") not in (None, "") else None,
+        fill_model=str(payload.get("fill_model", "intraday_high")),
+        slippage_bps=decimal(payload.get("slippage_bps", "0")),
+        commission=decimal(payload.get("commission", "0")),
+        sell_fee_bps=decimal(payload.get("sell_fee_bps", "0")),
+        progress_callback=progress_callback,
+    )
+
+
+def _update_random_job(job_id: str, completed: int, total: int, context: dict) -> None:
+    with _RANDOM_JOBS_LOCK:
+        job = _RANDOM_JOBS.get(job_id)
+        if job is None:
+            return
+        job["status"] = "running"
+        job["completed"] = max(0, min(int(completed), int(total)))
+        job["total"] = max(1, int(total))
+        job["phase"] = str(context.get("phase", "backtesting"))
+        job["message"] = str(context.get("message", "랜덤 구간을 계산하고 있습니다."))
+        job["context"] = {key: value for key, value in context.items() if key not in {"phase", "message"}}
+
+
+def _run_random_job(job_id: str, payload: dict) -> None:
+    try:
+        with _RANDOM_JOBS_LOCK:
+            job = _RANDOM_JOBS[job_id]
+            job["status"] = "running"
+            job["phase"] = "loading"
+            job["message"] = "가격 데이터와 공통 거래일을 준비하고 있습니다."
+            job["started_at"] = time.time()
+        result = _run_random_payload(
+            payload,
+            lambda completed, total, context: _update_random_job(job_id, completed, total, context),
+        )
+        with _RANDOM_JOBS_LOCK:
+            job = _RANDOM_JOBS[job_id]
+            job.update({
+                "status": "completed",
+                "phase": "completed",
+                "message": "랜덤 비교가 완료되었습니다.",
+                "completed": job["total"],
+                "result": result,
+                "finished_at": time.time(),
+            })
+    except Exception as error:
+        with _RANDOM_JOBS_LOCK:
+            job = _RANDOM_JOBS.get(job_id)
+            if job is not None:
+                job.update({
+                    "status": "failed",
+                    "phase": "failed",
+                    "message": "랜덤 비교 중 오류가 발생했습니다.",
+                    "error": str(error),
+                    "finished_at": time.time(),
+                })
+
+
+def _random_job_snapshot(job_id: str) -> dict:
+    with _RANDOM_JOBS_LOCK:
+        job = _RANDOM_JOBS.get(job_id)
+        if job is None:
+            raise KeyError("랜덤 비교 작업을 찾을 수 없습니다.")
+        snapshot = dict(job)
+    now = snapshot.get("finished_at") or time.time()
+    started = snapshot.get("started_at") or snapshot["created_at"]
+    elapsed = max(0.0, float(now) - float(started))
+    completed = int(snapshot.get("completed", 0))
+    total = max(1, int(snapshot.get("total", 1)))
+    snapshot["progress_pct"] = round(completed / total * 100, 1)
+    snapshot["elapsed_seconds"] = round(elapsed, 1)
+    snapshot["eta_seconds"] = (
+        round(elapsed / completed * (total - completed), 1)
+        if snapshot["status"] == "running" and completed > 0 else None
+    )
+    return to_primitive(snapshot)
+
+
+def _start_random_job(payload: dict) -> dict:
+    count = int(payload.get("count", 100))
+    if count <= 0 or count > MAX_STRATEGY_RANDOM_SAMPLES:
+        raise ValueError(f"랜덤 샘플 수는 1~{MAX_STRATEGY_RANDOM_SAMPLES:,}이어야 합니다.")
+    strategy_comparison = str(payload.get("analysis_mode", "lth_v4")) == "compare"
+    combinations = 1 if strategy_comparison else max(1, len(payload.get("symbols", []))) * max(1, len(payload.get("splits", [])))
+    job_id = uuid4().hex
+    created_at = time.time()
+    with _RANDOM_JOBS_LOCK:
+        completed_jobs = sorted(
+            (item for item in _RANDOM_JOBS.values() if item["status"] in {"completed", "failed"}),
+            key=lambda item: item["created_at"],
+        )
+        while len(_RANDOM_JOBS) >= RANDOM_JOB_LIMIT and completed_jobs:
+            _RANDOM_JOBS.pop(completed_jobs.pop(0)["job_id"], None)
+        if len(_RANDOM_JOBS) >= RANDOM_JOB_LIMIT:
+            raise ValueError("동시에 보관할 수 있는 랜덤 비교 작업 수를 초과했습니다. 실행 중인 작업이 끝난 뒤 다시 시도하세요.")
+        _RANDOM_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "phase": "queued",
+            "message": "랜덤 비교 작업을 준비하고 있습니다.",
+            "completed": 0,
+            "total": count * combinations,
+            "context": {},
+            "created_at": created_at,
+            "started_at": None,
+            "finished_at": None,
+            "result": None,
+            "error": None,
+        }
+    threading.Thread(target=_run_random_job, args=(job_id, dict(payload)), daemon=True).start()
+    return _random_job_snapshot(job_id)
 
 
 def _dataset_meta(path: Path) -> dict | None:
@@ -292,6 +426,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path_value = urlparse(self.path).path
+        if path_value.startswith("/api/random/jobs/"):
+            job_id = path_value.rsplit("/", 1)[-1]
+            try:
+                self._json(_random_job_snapshot(job_id))
+            except KeyError as error:
+                self._json({"error": str(error.args[0])}, HTTPStatus.NOT_FOUND)
+            return
         if path_value == "/api/meta":
             datasets: list[dict] = []
             seen: set[Path] = set()
@@ -318,30 +459,11 @@ class Handler(BaseHTTPRequestHandler):
             if path_value == "/api/parameter-sweep":
                 self._json(_run_sweep_payload(payload))
                 return
+            if path_value == "/api/random/jobs":
+                self._json(_start_random_job(payload), HTTPStatus.ACCEPTED)
+                return
             if path_value == "/api/random":
-                if str(payload.get("analysis_mode", "lth_v4")) == "compare":
-                    self._json(_run_strategy_random_payload(payload))
-                    return
-                csv_dir = Path(payload["csv_dir"]).expanduser() if payload.get("csv_dir") else None
-                result = run_random_comparison(
-                    symbols=[str(item) for item in payload.get("symbols", ["TQQQ", "SOXL"])],
-                    splits=[int(item) for item in payload.get("splits", [20, 40])],
-                    principal=decimal(payload.get("principal", "20000")),
-                    start_date=str(payload["start_date"]),
-                    end_date=str(payload["end_date"]),
-                    count=int(payload.get("count", 100)),
-                    min_days=int(payload.get("min_days", 60)),
-                    max_days=int(payload["max_days"]) if payload.get("max_days") not in (None, "") else None,
-                    seed=int(payload["seed"]) if payload.get("seed") not in (None, "") else None,
-                    csv_dir=csv_dir,
-                    compounding_type=str(payload.get("compounding_type", "compound")),
-                    sell_percent=decimal(payload["sell_percent"]) if payload.get("sell_percent") not in (None, "") else None,
-                    fill_model=str(payload.get("fill_model", "intraday_high")),
-                    slippage_bps=decimal(payload.get("slippage_bps", "0")),
-                    commission=decimal(payload.get("commission", "0")),
-                    sell_fee_bps=decimal(payload.get("sell_fee_bps", "0")),
-                )
-                self._json(result)
+                self._json(_run_random_payload(payload))
                 return
             if path_value == "/api/round-starts":
                 symbol = str(payload.get("symbol", "SOXL")).upper()

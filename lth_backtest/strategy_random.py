@@ -3,11 +3,16 @@ from __future__ import annotations
 import random
 import statistics
 from decimal import Decimal
+from typing import Callable
 
 from .comparison import STRATEGY_META, run_strategy_comparison
 from .models import PriceBar
 from .precision import ZERO, decimal, round_money, round_rate, to_primitive
 from .previous_high import PreviousHighConfig
+
+
+MAX_STRATEGY_RANDOM_SAMPLES = 5_000
+ProgressCallback = Callable[[int, int, dict], None]
 
 
 def _filter(prices: list[PriceBar], start_date: str, end_date: str) -> list[PriceBar]:
@@ -36,10 +41,11 @@ def run_strategy_random_comparison(
     v4_initial_entry: str = "web_loc",
     v4_first_buy_buffer_percent: Decimal = Decimal("12"),
     data_diagnostics: dict | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict:
     """Compare six fixed strategies over reproducible random common-date windows."""
-    if count <= 0 or count > 500:
-        raise ValueError("6전략 랜덤 샘플 수는 1~500이어야 합니다.")
+    if count <= 0 or count > MAX_STRATEGY_RANDOM_SAMPLES:
+        raise ValueError(f"6전략 랜덤 샘플 수는 1~{MAX_STRATEGY_RANDOM_SAMPLES:,}이어야 합니다.")
     if min_days < 2:
         raise ValueError("최소 거래일 수는 2 이상이어야 합니다.")
 
@@ -59,6 +65,7 @@ def run_strategy_random_comparison(
         soxl_prices,
         result_type="strategy_random_reference",
         data_diagnostics=data_diagnostics,
+        include_period_analysis=False,
         **comparison_kwargs,
     )
     common_dates = [item["date"] for item in full_result["comparison"]["equity_curve"]]
@@ -81,12 +88,17 @@ def run_strategy_random_comparison(
         })
 
     strategy_order = list(full_result["comparison"]["strategy_order"])
+    if progress_callback:
+        progress_callback(0, count, {
+            "phase": "sampling",
+            "message": f"공통 거래일에서 {count:,}개 랜덤 구간을 준비했습니다.",
+        })
     rows: list[dict] = []
     return_win_shares = {key: ZERO for key in strategy_order}
     risk_win_shares = {key: ZERO for key in strategy_order}
     rank_totals = {key: ZERO for key in strategy_order}
 
-    for period in sampled_ranges:
+    for completed, period in enumerate(sampled_ranges, start=1):
         start_date = period["start_date"]
         end_date = period["end_date"]
         result = run_strategy_comparison(
@@ -140,8 +152,22 @@ def run_strategy_random_comparison(
             "lowest_mdd": least_drawdown,
             "strategies": strategies,
         })
+        if progress_callback:
+            progress_callback(completed, count, {
+                "phase": "backtesting",
+                "message": f"{completed:,}/{count:,}번째 랜덤 구간 계산 완료",
+                "sample": period["sample"],
+                "start_date": start_date,
+                "end_date": end_date,
+                "trading_days": period["trading_days"],
+            })
 
     sample_count = Decimal(len(rows))
+    if progress_callback:
+        progress_callback(count, count, {
+            "phase": "summarizing",
+            "message": "6개 전략의 승률과 평균 성과를 요약하고 있습니다.",
+        })
     summary: list[dict] = []
     for key in strategy_order:
         returns = [decimal(row["strategies"][key]["return_rate"]) for row in rows]

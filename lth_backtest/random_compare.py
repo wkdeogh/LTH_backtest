@@ -5,6 +5,7 @@ import statistics
 from collections import defaultdict
 from decimal import Decimal
 from pathlib import Path
+from typing import Callable
 
 from .data import default_csv_path, load_prices
 from .engine import run_backtest
@@ -40,6 +41,7 @@ def run_random_comparison(
     slippage_bps: Decimal = ZERO,
     commission: Decimal = ZERO,
     sell_fee_bps: Decimal = ZERO,
+    progress_callback: Callable[[int, int, dict], None] | None = None,
 ) -> dict:
     if count <= 0:
         raise ValueError("랜덤 샘플 수는 1 이상이어야 합니다.")
@@ -74,6 +76,13 @@ def run_random_comparison(
 
     rows: list[dict] = []
     warnings: list[str] = []
+    total_runs = len(symbols) * len(splits) * len(ranges)
+    completed_runs = 0
+    if progress_callback:
+        progress_callback(0, total_runs, {
+            "phase": "sampling",
+            "message": f"{len(ranges):,}개 구간 × {len(symbols) * len(splits):,}개 조합을 준비했습니다.",
+        })
     for symbol in symbols:
         symbol_bars, _ = load_prices(path_for(symbol), start_date, end_date)
         for split in splits:
@@ -81,6 +90,15 @@ def run_random_comparison(
                 bars = _filter(symbol_bars, period["start_date"], period["end_date"])
                 if len(bars) < 2:
                     warnings.append(f"{symbol} {period['start_date']}~{period['end_date']}: 데이터 부족으로 제외")
+                    completed_runs += 1
+                    if progress_callback:
+                        progress_callback(completed_runs, total_runs, {
+                            "phase": "backtesting",
+                            "message": f"{completed_runs:,}/{total_runs:,}개 조합 계산 완료",
+                            "symbol": symbol,
+                            "split_count": split,
+                            "sample": period["sample"],
+                        })
                     continue
                 config = BacktestConfig(
                     symbol=symbol,
@@ -116,8 +134,22 @@ def run_random_comparison(
                     "execution_count": len(result.executions),
                     "intraday_high_only_fills": result.diagnostics.get("intraday_high_only_fills", 0),
                 })
+                completed_runs += 1
+                if progress_callback:
+                    progress_callback(completed_runs, total_runs, {
+                        "phase": "backtesting",
+                        "message": f"{completed_runs:,}/{total_runs:,}개 조합 계산 완료",
+                        "symbol": symbol,
+                        "split_count": split,
+                        "sample": period["sample"],
+                    })
 
     grouped: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    if progress_callback:
+        progress_callback(total_runs, total_runs, {
+            "phase": "summarizing",
+            "message": "종목·분할 조합별 평균 성과를 요약하고 있습니다.",
+        })
     for row in rows:
         grouped[(row["symbol"], row["split_count"])].append(row)
     summary: list[dict] = []
