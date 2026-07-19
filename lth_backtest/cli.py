@@ -8,9 +8,12 @@ from decimal import Decimal
 from pathlib import Path
 
 from .data import DATA_ROOT, download_all_prices, download_prices, load_prices, parse_date, resolve_csv_path
+from .comparison import run_strategy_comparison
 from .engine import run_backtest
 from .models import BacktestConfig
+from .parameter_sweep import DEFAULT_DIVISIONS, DEFAULT_INTERVALS, run_parameter_sweep
 from .precision import decimal, to_primitive
+from .previous_high import PreviousHighConfig
 from .random_compare import run_random_comparison
 from .reporting import write_html_report, write_json, write_random_html_report, write_result_csvs
 
@@ -38,7 +41,7 @@ def _print_result(result: object) -> None:
     metrics = data["metrics"]
     config = data["config"]
     period = data["period"]
-    print("\nBackTest version2 결과")
+    print("\nBackTest version3 결과")
     print("======================")
     print(f"{config['symbol']} · {config['split_count']}분할 · {config['compounding_type']} · {config['fill_model']}")
     print(f"기간: {period['start']} ~ {period['end']} ({period['trading_days']:,}거래일)")
@@ -130,23 +133,104 @@ def command_random(args: argparse.Namespace) -> object:
     return result
 
 
+def _previous_config(args: argparse.Namespace) -> PreviousHighConfig:
+    return PreviousHighConfig(
+        principal=decimal(args.principal),
+        trigger_interval_pct=decimal(args.trigger_interval),
+        divisions=args.divisions,
+        fractional_shares=args.fractional_shares,
+        liquidation_offset_pct=decimal(args.liquidation_offset),
+        slippage_bps=decimal(args.slippage_bps),
+        commission=decimal(args.commission),
+        sell_fee_bps=decimal(args.sell_fee_bps),
+        annual_risk_free_rate=decimal(args.risk_free_rate),
+    )
+
+
+def _previous_prices(args: argparse.Namespace) -> tuple[list, list, dict]:
+    soxx_path = resolve_csv_path(args.soxx_csv, "SOXX")
+    soxl_path = resolve_csv_path(args.soxl_csv, "SOXL")
+    soxx, soxx_diagnostics = load_prices(soxx_path, args.start_date, args.end_date)
+    soxl, soxl_diagnostics = load_prices(soxl_path, args.start_date, args.end_date)
+    if soxx_diagnostics.get("price_basis") != soxl_diagnostics.get("price_basis"):
+        raise ValueError("SOXX와 SOXL 데이터의 가격 기준이 다릅니다.")
+    diagnostics = {
+        "SOXX": soxx_diagnostics,
+        "SOXL": soxl_diagnostics,
+        "requested_start_date": args.start_date,
+        "requested_end_date": args.end_date,
+    }
+    return soxx, soxl, diagnostics
+
+
+def command_previous_high(args: argparse.Namespace) -> object:
+    soxx, soxl, diagnostics = _previous_prices(args)
+    result = run_strategy_comparison(
+        _previous_config(args), soxx, soxl,
+        v4_split_count=args.v4_split_count,
+        result_type="comparison",
+        data_diagnostics=diagnostics,
+    )
+    print("\n전고점매매법 · 4전략 비교")
+    print("==========================")
+    print(f"기간: {result['period']['start']} ~ {result['period']['end']} ({result['period']['trading_days']:,} 공통 거래일)")
+    for key in result["comparison"]["strategy_order"]:
+        strategy = result["comparison"]["strategies"][key]
+        print(
+            f"{strategy['label']}: ${strategy['summary']['ending_equity']:,.2f} · "
+            f"수익률 {strategy['metrics']['total_return']:+,.2f}% · CAGR {strategy['metrics']['cagr']:+,.2f}% · "
+            f"MDD {strategy['metrics']['close_mdd']:,.2f}%"
+        )
+    for warning in result.get("warnings", []):
+        print(f"주의: {warning}")
+    _save_outputs(result, args)
+    return result
+
+
+def command_previous_high_sweep(args: argparse.Namespace) -> object:
+    soxx, soxl, diagnostics = _previous_prices(args)
+    result = run_parameter_sweep(
+        _previous_config(args), soxx, soxl,
+        [decimal(value) for value in args.intervals],
+        args.division_candidates,
+        data_diagnostics=diagnostics,
+    )
+    print("\n전고점매매법 파라미터 안정성")
+    print("=============================")
+    for row in result["stable_regions"]:
+        print(
+            f"간격 {row['trigger_interval_pct']}% × {row['divisions']}분할 · "
+            f"CAGR {row['cagr']:+,.2f}% · MDD {row['close_mdd']:,.2f}% · "
+            f"안정성 {row['stability_score']:,.2f}"
+        )
+    if args.json_out:
+        write_json(result, Path(args.json_out))
+        print(f"JSON 저장: {args.json_out}")
+    if args.csv_out_dir:
+        path = Path(args.csv_out_dir) / "parameter_sweep.csv"
+        from .reporting import _write_csv
+        _write_csv(result["rows"], path)
+        print(f"CSV 저장: {path}")
+    return result
+
+
 def command_serve(args: argparse.Namespace) -> None:
     from .web import serve
     serve(args.host, args.port, args.open)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="무한매수법 V4 정밀 백테스터 version2")
+    parser = argparse.ArgumentParser(description="무한매수법 V4·전고점매매법 정밀 백테스터 version3")
     sub = parser.add_subparsers(dest="command", required=True)
 
     download = sub.add_parser("download", help="Yahoo Finance 실제 OHLCV 다운로드 (분할 반영·배당 미보정)")
-    download.add_argument("symbol", choices=["TQQQ", "SOXL", "QLD"])
+    download.add_argument("symbol", choices=["TQQQ", "SOXX", "SOXL", "QLD"])
     download.add_argument("start_date", type=lambda value: parse_date(value, "시작일"))
     download.add_argument("end_date", type=lambda value: parse_date(value, "종료일"))
     download.add_argument("--out")
     download.set_defaults(func=command_download)
 
-    download_all = sub.add_parser("download-all", help="TQQQ, SOXL, QLD 전체 이력을 오늘까지 다운로드")
+    download_all = sub.add_parser("download-all", help="TQQQ, SOXX, SOXL, QLD 전체 이력을 오늘까지 다운로드")
     download_all.add_argument("--end-date", default=date.today().isoformat(), type=lambda value: parse_date(value, "종료일"))
     download_all.add_argument("--out-dir")
     download_all.set_defaults(func=command_download_all)
@@ -200,6 +284,35 @@ def build_parser() -> argparse.ArgumentParser:
     random_parser.add_argument("--json-out")
     random_parser.add_argument("--html-out")
     random_parser.set_defaults(func=command_random)
+
+    def add_previous_high_options(target: argparse.ArgumentParser) -> None:
+        target.add_argument("principal", type=Decimal)
+        target.add_argument("start_date", type=lambda value: parse_date(value, "시작일"))
+        target.add_argument("end_date", type=lambda value: parse_date(value, "종료일"))
+        target.add_argument("--soxx-csv")
+        target.add_argument("--soxl-csv")
+        target.add_argument("--trigger-interval", type=Decimal, default=Decimal("5"))
+        target.add_argument("--divisions", type=int, default=20)
+        target.add_argument("--fractional-shares", action="store_true")
+        target.add_argument("--liquidation-offset", type=Decimal, default=Decimal("0"))
+        target.add_argument("--slippage-bps", type=Decimal, default=Decimal("0"))
+        target.add_argument("--commission", type=Decimal, default=Decimal("0"))
+        target.add_argument("--sell-fee-bps", type=Decimal, default=Decimal("0"))
+        target.add_argument("--risk-free-rate", type=Decimal, default=Decimal("0"))
+        target.add_argument("--json-out")
+        target.add_argument("--csv-out-dir")
+
+    previous = sub.add_parser("previous-high", aliases=["ph"], help="전고점매매법과 4전략 비교")
+    add_previous_high_options(previous)
+    previous.add_argument("--v4-split-count", type=int, choices=[20, 30, 40], default=20)
+    previous.add_argument("--html-out")
+    previous.set_defaults(func=command_previous_high)
+
+    sweep = sub.add_parser("previous-high-sweep", aliases=["ph-sweep"], help="전고점매매법 파라미터 안정성 분석")
+    add_previous_high_options(sweep)
+    sweep.add_argument("--intervals", nargs="+", type=Decimal, default=list(DEFAULT_INTERVALS))
+    sweep.add_argument("--division-candidates", nargs="+", type=int, default=list(DEFAULT_DIVISIONS))
+    sweep.set_defaults(func=command_previous_high_sweep)
 
     server = sub.add_parser("serve", help="브라우저 UI 실행")
     server.add_argument("--host", default="127.0.0.1")

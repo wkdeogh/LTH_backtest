@@ -15,9 +15,9 @@ from .precision import ZERO, decimal, round_market_price
 PACKAGE_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PACKAGE_ROOT.parent
 DATA_ROOT = REPOSITORY_ROOT / "data"
-VALID_PRICE_SYMBOLS = {"TQQQ", "SOXL", "QLD"}
+VALID_PRICE_SYMBOLS = {"TQQQ", "SOXX", "SOXL", "QLD"}
 FULL_HISTORY_START_DATE = "1970-01-02"
-DOWNLOAD_SYMBOLS = ("TQQQ", "SOXL", "QLD")
+DOWNLOAD_SYMBOLS = ("TQQQ", "SOXX", "SOXL", "QLD")
 PRICE_BASIS_ACTUAL = "actual_split_adjusted"
 
 
@@ -45,6 +45,65 @@ def resolve_csv_path(path_value: str | Path | None, symbol: str) -> Path:
     return path
 
 
+def align_price_series(
+    left: list[PriceBar],
+    right: list[PriceBar],
+    left_symbol: str = "SOXX",
+    right_symbol: str = "SOXL",
+) -> tuple[list[tuple[PriceBar, PriceBar]], dict]:
+    """Align two assets on their strict trading-date intersection.
+
+    Missing rows are never forward-filled. Inputs may be unsorted, but a
+    duplicate date in either series is rejected instead of being silently
+    overwritten.
+    """
+    left_symbol = left_symbol.strip().upper() or "LEFT"
+    right_symbol = right_symbol.strip().upper() or "RIGHT"
+
+    def index_by_date(bars: list[PriceBar], symbol: str) -> dict[str, PriceBar]:
+        indexed: dict[str, PriceBar] = {}
+        for item in bars:
+            if item.date in indexed:
+                raise ValueError(f"{symbol} 가격 데이터에 중복 거래일이 있습니다: {item.date}")
+            indexed[item.date] = item
+        return indexed
+
+    def date_sample(dates: list[str], size: int = 3) -> list[str]:
+        if len(dates) <= size * 2:
+            return dates
+        return dates[:size] + dates[-size:]
+
+    left_by_date = index_by_date(left, left_symbol)
+    right_by_date = index_by_date(right, right_symbol)
+    left_dates = set(left_by_date)
+    right_dates = set(right_by_date)
+    common_dates = sorted(left_dates & right_dates)
+    if len(common_dates) < 2:
+        raise ValueError(
+            f"{left_symbol}와 {right_symbol}의 공통 거래일이 최소 2일 필요합니다. "
+            f"현재 {len(common_dates)}일입니다."
+        )
+
+    left_only_dates = sorted(left_dates - right_dates)
+    right_only_dates = sorted(right_dates - left_dates)
+    aligned = [(left_by_date[date_value], right_by_date[date_value]) for date_value in common_dates]
+    diagnostics = {
+        "alignment_rule": "strict_date_intersection_no_forward_fill",
+        "left_symbol": left_symbol,
+        "right_symbol": right_symbol,
+        "left_row_count": len(left),
+        "right_row_count": len(right),
+        "common_row_count": len(common_dates),
+        "common_start_date": common_dates[0],
+        "common_end_date": common_dates[-1],
+        "left_only_count": len(left_only_dates),
+        "right_only_count": len(right_only_dates),
+        "left_only_date_samples": date_sample(left_only_dates),
+        "right_only_date_samples": date_sample(right_only_dates),
+    }
+    return aligned, diagnostics
+
+
 def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[PriceBar], dict]:
     parse_date(start_date, "시작일")
     parse_date(end_date, "종료일")
@@ -57,6 +116,8 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
     seen: set[str] = set()
     adjusted_rows = 0
     price_bases: set[str] = set()
+    basis_labeled_rows = 0
+    basis_missing_rows = 0
     with csv_path.open("r", newline="", encoding="utf-8-sig") as file:
         reader = csv.DictReader(file)
         required = {"date", "open", "high", "low", "close"}
@@ -93,6 +154,9 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
             price_basis = (row.get("price_basis") or "").strip().lower()
             if price_basis:
                 price_bases.add(price_basis)
+                basis_labeled_rows += 1
+            else:
+                basis_missing_rows += 1
             if adj_close != close_price:
                 adjusted_rows += 1
             bars.append(PriceBar(date_value, open_price, high_price, low_price, close_price, adj_close, volume))
@@ -102,6 +166,8 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
         raise ValueError("백테스트에는 최소 2거래일의 가격 데이터가 필요합니다.")
     if len(price_bases) > 1:
         raise ValueError("CSV에 서로 다른 가격 기준이 섞여 있습니다.")
+    if basis_labeled_rows and basis_missing_rows:
+        raise ValueError("CSV 일부 행에만 price_basis가 있습니다. 모든 행에 같은 가격 기준을 표시하세요.")
     is_managed_dataset = csv_path.resolve().parent == DATA_ROOT.resolve()
     price_basis = next(iter(price_bases), "user_provided")
     if is_managed_dataset and price_basis != PRICE_BASIS_ACTUAL:
@@ -123,6 +189,8 @@ def load_prices(csv_path: Path, start_date: str, end_date: str) -> tuple[list[Pr
         "adjusted_close_diff_rows": adjusted_rows,
         "auto_adjusted_ohlc_rows": 0,
         "price_basis": price_basis,
+        "price_basis_labeled_rows": basis_labeled_rows,
+        "price_basis_missing_rows": basis_missing_rows,
         "dividend_adjustment": "not_applied_to_ohlc",
         "split_adjustment": "included_in_yahoo_quote_ohlc",
         "long_gap_count": gap_count,
@@ -141,7 +209,7 @@ def _unix_seconds(date_value: str) -> int:
 def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path | None = None) -> Path:
     symbol = symbol.upper()
     if symbol not in VALID_PRICE_SYMBOLS:
-        raise ValueError("가격 다운로드는 TQQQ, SOXL, QLD를 지원합니다.")
+        raise ValueError("가격 다운로드는 TQQQ, SOXX, SOXL, QLD를 지원합니다.")
     parse_date(start_date, "시작일")
     parse_date(end_date, "종료일")
     if start_date > end_date:
@@ -155,7 +223,7 @@ def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path 
         "events": "history|split|div",
     })
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?{params}"
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (BackTest version2)"})
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0 (BackTest version3)"})
     with urlopen(request, timeout=30) as response:
         payload = json.loads(response.read().decode("utf-8"))
 
@@ -178,6 +246,11 @@ def download_prices(symbol: str, start_date: str, end_date: str, out_path: Path 
             adj_raw = adjusted[index] if index < len(adjusted) else close_raw
         except IndexError:
             continue
+        # Adjusted close is retained only as reference metadata.  Yahoo can
+        # occasionally omit it while still returning a complete, valid OHLC
+        # row; dropping that row would create a false cross-symbol date gap.
+        if adj_raw is None:
+            adj_raw = close_raw
         if close_raw is None or adj_raw is None or close_raw <= 0 or adj_raw <= 0:
             continue
         values: dict[str, Decimal] = {}

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lth-backtest"
-version = "2.5.1"
-description = "Precision-first Infinite Buying V4 backtester with a local browser UI"
+version = "3.0.0"
+description = "Precision-first Infinite Buying V4 and previous-high strategy backtester"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }

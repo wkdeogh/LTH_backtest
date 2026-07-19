@@ -41,8 +41,10 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn('id="dateRangeStart"', html)
         self.assertIn('id="dateRangeEnd"', html)
         self.assertLess(html.index('id="backtestForm"'), html.index('id="marketDataTitle"'))
-        self.assertIn("실제 거래 OHLC", html)
-        self.assertIn("ACTUAL OHLCV", html)
+        self.assertIn("실제 OHLC", html)
+        self.assertIn('id="candleBasisEyebrow"', html)
+        self.assertIn('id="candleBasisDescription"', html)
+        self.assertIn('id="candleBasisNote"', html)
 
     def test_candlestick_uses_visible_ohlc_bodies_and_korean_colors(self) -> None:
         html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
@@ -56,6 +58,8 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn("하락 · 파랑", html)
         self.assertIn(".candle-up::before { background: #e43f45; }", stylesheet)
         self.assertIn(".candle-down::before { background: #1976d2; }", stylesheet)
+        self.assertIn('actual ? "ACTUAL OHLCV" : "INPUT OHLCV"', javascript)
+        self.assertIn("실제 거래가격으로 단정하지 않습니다", javascript)
 
     def test_round_mdd_and_round_start_visualizations_are_present(self) -> None:
         html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
@@ -69,6 +73,8 @@ class WebConfigurationTests(unittest.TestCase):
         self.assertIn("function drawRoundStartScatterChart()", javascript)
         self.assertIn("item.mdd_peak_date", javascript)
         self.assertIn("item.benchmark_profit_rate", javascript)
+        self.assertIn("item.recovery_trading_days", javascript)
+        self.assertIn("item.max_loss_from_start", javascript)
         self.assertIn(".round-start-visuals", stylesheet)
         self.assertIn("grid-template-columns: minmax(0,1fr)", stylesheet)
         self.assertIn(".round-chart-wrap { position: relative; width: 100%; height: 360px; }", stylesheet)
@@ -76,11 +82,67 @@ class WebConfigurationTests(unittest.TestCase):
     def test_equity_tooltip_shows_each_curve_return_from_initial_principal(self) -> None:
         javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
 
-        self.assertIn("Number(value) / initialEquity - 1", javascript)
-        self.assertIn("전략 ${money(point.equity)} (${percent(returnRate(point.equity), 2, true)})", javascript)
-        self.assertIn("종목 ${money(point.benchmark_equity)} (${percent(returnRate(point.benchmark_equity), 2, true)})", javascript)
-        self.assertIn("QLD ${money(point.qld_benchmark_equity)} (${percent(returnRate(point.qld_benchmark_equity), 2, true)})", javascript)
+        self.assertIn("function showSeriesTooltip(event, tooltipSelector, options = {})", javascript)
+        self.assertIn("Number(value) / principal - 1", javascript)
+        self.assertIn("{ includeReturn: true }", javascript)
+        self.assertIn('key: "benchmark_equity"', javascript)
+        self.assertIn('key: "qld_benchmark_equity"', javascript)
         self.assertNotIn("<br>낙폭 ${percent(point.drawdown)}", javascript)
+
+    def test_previous_high_modes_datasets_and_payload_are_wired(self) -> None:
+        html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+        javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn('name="analysis_mode" value="lth_v4" checked', html)
+        self.assertIn('name="analysis_mode" value="previous_high"', html)
+        self.assertIn('name="analysis_mode" value="compare"', html)
+        self.assertIn('id="previousHighSettings"', html)
+        self.assertIn('id="previousHighDatasetFields"', html)
+        self.assertIn('id="lthDatasetFields" data-analysis-modes="lth_v4"', html)
+        self.assertIn('id="compareV4SymbolNote" data-analysis-modes="compare"', html)
+        self.assertIn("function syncAnalysisMode(refreshDatasets = true)", javascript)
+        self.assertIn("function intersectTradingDates(left, right)", javascript)
+        self.assertIn("analysis_mode: raw.analysis_mode || selectedAnalysisMode()", javascript)
+        self.assertIn("soxx_csv_path: raw.soxx_csv_path", javascript)
+        self.assertIn("soxl_csv_path: raw.soxl_csv_path", javascript)
+        self.assertIn("fractional_shares: Boolean(form.elements.fractional_shares?.checked)", javascript)
+        self.assertIn('symbol: raw.symbol || "SOXL"', javascript)
+        self.assertIn("split_count: Number(raw.split_count || 20)", javascript)
+        self.assertIn('fill_model: raw.fill_model || "intraday_high"', javascript)
+
+    def test_four_way_previous_high_and_sweep_visuals_are_integrated(self) -> None:
+        javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+        stylesheet = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("function renderComparison(result)", javascript)
+        self.assertIn('id="comparisonYearSummary"', (STATIC_ROOT / "index.html").read_text(encoding="utf-8"))
+        self.assertIn('annual.previous_high_over_soxx_rate', javascript)
+        self.assertIn("function drawComparisonCharts()", javascript)
+        self.assertIn("function renderPreviousHighAnalytics(result)", javascript)
+        self.assertIn("function drawPreviousHighScatter()", javascript)
+        self.assertIn('api("/api/parameter-sweep", payload)', javascript)
+        self.assertIn("function drawHeatmap(canvas, matrix, axes, options = {})", javascript)
+        self.assertIn("app.candleBars = normalizedMarketBars(result, app.candleSymbol)", javascript)
+        self.assertIn("min-height: 360px", stylesheet)
+
+    def test_comparison_renders_five_observational_hypotheses_safely(self) -> None:
+        html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+        javascript = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+        stylesheet = (STATIC_ROOT / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="comparisonHypothesisGrid"', html)
+        self.assertIn("핵심 가설 관찰 결과", html)
+        self.assertIn("인과 증명 아님", html)
+        self.assertIn("function renderHypothesisChecks(comparison)", javascript)
+        self.assertIn("function hypothesisPresentation(item)", javascript)
+        self.assertIn("Number(item.id) >= 1 && Number(item.id) <= 5", javascript)
+        self.assertIn("item.previous_high_mdd", javascript)
+        self.assertIn("item.recovery_conversion_count", javascript)
+        self.assertIn("item.interpretation", javascript)
+        self.assertIn("escapeHtml(view.scope)", javascript)
+        self.assertIn("escapeHtml(view.interpretation)", javascript)
+        self.assertIn(".hypothesis-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr))", stylesheet)
+        self.assertIn(".hypothesis-grid { grid-template-columns: minmax(0,1fr); }", stylesheet)
 
 
 if __name__ == "__main__":

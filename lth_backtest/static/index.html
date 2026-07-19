@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>BackTest version2</title>
+  <title>BackTest version3</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand-mark">V2</div>
+      <div class="brand-mark">V3</div>
       <div class="brand-copy">
-        <h1>BackTest <span>version2</span></h1>
-        <p>무한매수법 V4 · 실제 거래 OHLC 정밀 시뮬레이터</p>
+        <h1>BackTest <span>version3</span></h1>
+        <p>무한매수법 V4 · 전고점매매법 · 4전략 정밀 비교</p>
       </div>
       <div class="top-actions">
         <span class="status-dot" id="serverStatus">연결 확인 중</span>
@@ -31,24 +31,58 @@
             <button type="button" class="icon-button" id="resetForm" aria-label="기본값 복원">↺</button>
           </div>
 
-          <section class="form-section">
-            <h3>전략</h3>
-            <div class="segmented" role="radiogroup" aria-label="종목">
+          <section class="form-section analysis-mode-section">
+            <h3>분석 모드</h3>
+            <div class="segmented three" id="analysisModeSelector" role="radiogroup" aria-label="분석 모드">
+              <label><input type="radio" name="analysis_mode" value="lth_v4" checked><span>무한매수 V4</span></label>
+              <label><input type="radio" name="analysis_mode" value="previous_high"><span>전고점</span></label>
+              <label><input type="radio" name="analysis_mode" value="compare"><span>4전략 비교</span></label>
+            </div>
+            <p class="field-help" id="analysisModeHelp">기존 무한매수법 V4를 단독으로 정밀 분석합니다.</p>
+            <label class="field"><span>시작 원금 ($)</span><input name="principal" type="number" min="1" step="0.01" value="20000" required></label>
+          </section>
+
+          <section class="form-section conditional-settings" id="lthSettings" data-analysis-modes="lth_v4 compare">
+            <h3>무한매수법 V4 설정</h3>
+            <div class="segmented" id="v4SymbolSelector" data-analysis-modes="lth_v4" role="radiogroup" aria-label="종목">
               <label><input type="radio" name="symbol" value="TQQQ"><span>TQQQ</span></label>
               <label><input type="radio" name="symbol" value="SOXL" checked><span>SOXL</span></label>
             </div>
+            <p class="field-help hidden" id="compareV4SymbolNote" data-analysis-modes="compare">4전략 비교의 무한매수법 V4는 SOXL로 고정하며 분할·운용·매도 설정만 적용합니다.</p>
             <div class="field-grid two">
               <label class="field"><span>분할 수</span><select name="split_count"><option value="20" selected>20분할</option><option value="40">40분할</option><option value="30">30분할 · 실험</option></select></label>
               <label class="field"><span>운용 방식</span><select name="compounding_type"><option value="compound">복리</option><option value="simple">단리</option></select></label>
             </div>
-            <label class="field"><span>시작 원금 ($)</span><input name="principal" type="number" min="1" step="0.01" value="20000" required></label>
             <label class="field"><span>최종 매도 기준 (%) <small>비우면 TQQQ 15 / SOXL 20</small></span><input name="sell_percent" type="number" min="0.01" step="0.01" placeholder="종목 기본값"></label>
+          </section>
+
+          <section class="form-section conditional-settings hidden" id="previousHighSettings" data-analysis-modes="previous_high compare">
+            <div class="section-title-row"><h3>전고점 매매법 설정</h3><span class="baseline-badge">기본 전략</span></div>
+            <div class="field-grid two">
+              <label class="field"><span>매매 간격 (%)</span><input name="trigger_interval_pct" type="number" min="0.1" max="99" step="0.1" value="5"></label>
+              <label class="field"><span>분할 수</span><input name="divisions" type="number" min="2" max="500" step="1" value="20"></label>
+            </div>
+            <label class="check-row"><input type="checkbox" name="fractional_shares"><span>소수점 주식 매매 허용 <small>기본값은 정수 주식·수량 버림입니다.</small></span></label>
+            <details class="experiment-settings">
+              <summary>비교용 실험 설정</summary>
+              <div class="advanced-body">
+                <label class="field"><span>전고점 청산 위치 (%)</span><input name="liquidation_offset_pct" type="number" min="-50" max="50" step="0.1" value="0"></label>
+                <p class="field-help experiment-warning">실험 옵션입니다. 원본 전략은 0%에서 기존 전고점 회복 시 청산하며, 변형 결과와 섞지 않습니다.</p>
+              </div>
+            </details>
           </section>
 
           <section class="form-section">
             <h3>가격 데이터</h3>
-            <label class="field"><span>가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="data/SOXL.csv" required><datalist id="csvOptions"></datalist></label>
-            <p class="field-help" id="datasetInfo">분할만 반영하고 배당은 소급 보정하지 않은 실제 OHLC를 사용합니다.</p>
+            <div class="conditional-settings" id="lthDatasetFields" data-analysis-modes="lth_v4">
+              <label class="field"><span>무한매수법 가격 CSV</span><input name="csv_path" id="csvPath" list="csvOptions" placeholder="data/SOXL.csv" required><datalist id="csvOptions"></datalist></label>
+              <p class="field-help" id="datasetInfo">분할만 반영하고 배당은 소급 보정하지 않은 실제 OHLC를 사용합니다.</p>
+            </div>
+            <div class="conditional-settings paired-datasets hidden" id="previousHighDatasetFields" data-analysis-modes="previous_high compare">
+              <label class="field"><span>SOXX 가격 CSV</span><input name="soxx_csv_path" id="soxxCsvPath" list="soxxCsvOptions" placeholder="data/SOXX.csv"><datalist id="soxxCsvOptions"></datalist></label>
+              <label class="field"><span>SOXL 가격 CSV</span><input name="soxl_csv_path" id="soxlCsvPath" list="soxlCsvOptions" placeholder="data/SOXL.csv"><datalist id="soxlCsvOptions"></datalist></label>
+              <p class="field-help shared-dataset-info" id="sharedDatasetInfo">SOXX와 SOXL의 거래일이 모두 존재하는 공통 기간만 사용하며, 누락일을 전일 가격으로 채우지 않습니다.</p>
+            </div>
           </section>
 
           <section class="form-section">
@@ -72,18 +106,18 @@
           <details class="form-section advanced">
             <summary>체결·비용 고급 설정</summary>
             <div class="advanced-body">
-              <label class="field"><span>최종 지정가 체결</span><select name="fill_model"><option value="intraday_high">장중 고가 기준 · 권장</option><option value="close_only">종가 기준 · 비교용</option></select></label>
-              <label class="field"><span>새 라운드 첫 매수</span><select name="initial_entry"><option value="web_loc">전일 종가 + 버퍼 LOC · 권장</option><option value="moc">당일 종가 MOC · 기존 호환</option></select></label>
-              <div class="field-grid two">
+              <div class="conditional-settings" id="lthExecutionSettings" data-analysis-modes="lth_v4 compare">
+                <label class="field"><span>최종 지정가 체결</span><select name="fill_model"><option value="intraday_high">장중 고가 기준 · 권장</option><option value="close_only">종가 기준 · 비교용</option></select></label>
+                <label class="field"><span>새 라운드 첫 매수</span><select name="initial_entry"><option value="web_loc">전일 종가 + 버퍼 LOC · 권장</option><option value="moc">당일 종가 MOC · 기존 호환</option></select></label>
                 <label class="field"><span>첫 매수 버퍼 (%)</span><input name="first_buy_buffer_percent" type="number" min="0" step="0.1" value="12"></label>
-                <label class="field"><span>무위험 수익률 (%)</span><input name="annual_risk_free_rate" type="number" step="0.01" value="0"></label>
               </div>
+              <label class="field"><span>무위험 수익률 (%)</span><input name="annual_risk_free_rate" type="number" step="0.01" value="0"></label>
               <div class="field-grid three">
-                <label class="field"><span>슬리피지 (bp)</span><input name="slippage_bps" type="number" min="0" step="0.1" value="0"></label>
+                <label class="field"><span>슬리피지 (bp)</span><input name="slippage_bps" type="number" min="0" max="9999.9" step="0.1" value="0"></label>
                 <label class="field"><span>건당 수수료 ($)</span><input name="commission" type="number" min="0" step="0.0001" value="0"></label>
-                <label class="field"><span>매도 비용 (bp)</span><input name="sell_fee_bps" type="number" min="0" step="0.01" value="0"></label>
+                <label class="field"><span>매도 비용 (bp)</span><input name="sell_fee_bps" type="number" min="0" max="9999.99" step="0.01" value="0"></label>
               </div>
-              <label class="check-row"><input type="checkbox" name="compare_close_only" checked><span>장중 고가와 종가 전용 결과 자동 비교</span></label>
+              <label class="check-row conditional-settings" id="closeOnlyComparisonSetting" data-analysis-modes="lth_v4 compare"><input type="checkbox" name="compare_close_only" checked><span>장중 고가와 종가 전용 결과 자동 비교</span></label>
             </div>
           </details>
 
@@ -93,9 +127,9 @@
         <section class="market-data-manager" aria-labelledby="marketDataTitle">
           <div class="market-data-head">
             <div><span class="eyebrow">MARKET DATA</span><h2 id="marketDataTitle">전체 가격 데이터</h2></div>
-            <span class="data-scope">3종목</span>
+            <span class="data-scope">4종목</span>
           </div>
-          <p>TQQQ · SOXL · QLD의 분할 반영·배당 미보정 실제 거래가격을 오늘까지 갱신합니다.</p>
+          <p>SOXX · TQQQ · SOXL · QLD의 분할 반영·배당 미보정 실제 거래가격을 오늘까지 갱신합니다.</p>
           <button type="button" class="button secondary full" id="refreshPrices">전체 데이터 갱신</button>
         </section>
       </aside>
@@ -103,12 +137,15 @@
       <section class="results-panel">
         <nav class="tabs" aria-label="결과 화면">
           <button class="tab active" data-tab="overview">대시보드</button>
+          <button class="tab hidden" id="comparisonTab" data-tab="comparison" data-analysis-modes="compare">전략 비교</button>
+          <button class="tab hidden" id="previousHighAnalyticsTab" data-tab="previous-high" data-analysis-modes="previous_high compare">전고점 분석</button>
           <button class="tab" data-tab="candles">캔들 차트</button>
           <button class="tab" data-tab="executions">체결 내역 <span id="executionCount"></span></button>
           <button class="tab" data-tab="rounds">라운드 <span id="roundCount"></span></button>
-          <button class="tab" data-tab="round-starts">시작일별 1라운드 <span id="roundStartCount"></span></button>
+          <button class="tab" id="roundStartsTab" data-tab="round-starts" data-analysis-modes="lth_v4">시작일별 1라운드 <span id="roundStartCount"></span></button>
           <button class="tab" data-tab="periods">기간별 수익</button>
-          <button class="tab" data-tab="random">랜덤 비교</button>
+          <button class="tab hidden" id="parameterSweepTab" data-tab="sweep" data-analysis-modes="previous_high compare">파라미터 탐색</button>
+          <button class="tab" id="randomComparisonTab" data-tab="random" data-analysis-modes="lth_v4">랜덤 비교</button>
         </nav>
 
         <div class="loading hidden" id="loading"><div class="spinner"></div><strong>정밀 계산 중입니다</strong><span>일별 주문과 체결을 순서대로 검증하고 있습니다.</span></div>
@@ -119,7 +156,7 @@
             <div class="empty-visual"><span></span><span></span><span></span><span></span><span></span></div>
             <h2>조건을 정하고 백테스트를 실행하세요</h2>
             <p>장중 고가 최종매도, LOC 종가 체결, 리버스모드, 단리·복리와 거래비용을 한 번에 분석합니다.</p>
-            <div class="assumption-strip"><span>가격</span><strong>실제 OHLC</strong><i></i><span>주문가</span><strong>소수 2자리</strong><i></i><span>T값</span><strong>소수 10자리</strong></div>
+            <div class="assumption-strip"><span>가격</span><strong>입력 OHLC</strong><i></i><span>주문가</span><strong>소수 2자리</strong><i></i><span>T값</span><strong>소수 10자리</strong></div>
           </div>
 
           <div class="results-content hidden" id="resultsContent">
@@ -131,7 +168,7 @@
             <div class="comparison-callout hidden" id="fillComparison"></div>
             <div class="dashboard-grid">
               <article class="panel chart-panel wide">
-                <div class="panel-head"><div><h3>자산 곡선</h3><p>전략·종목 거치식·QLD 거치식의 일별 종가 평가액</p></div><div class="legend"><span class="strategy">전략</span><span class="benchmark">종목</span><span class="qld">QLD</span></div></div>
+                <div class="panel-head"><div><h3>자산 곡선</h3><p id="equityChartDescription">전략·종목 거치식·QLD 거치식의 일별 종가 평가액</p></div><div class="chart-head-actions"><label class="chart-toggle"><input id="equityLogScale" type="checkbox"><span>로그 축</span></label><div class="legend" id="equityLegend"><span class="strategy">전략</span><span class="benchmark">종목</span><span class="qld">QLD</span></div></div></div>
                 <div class="canvas-wrap"><canvas id="equityChart"></canvas><div class="chart-tooltip hidden" id="equityTooltip"></div></div>
               </article>
               <article class="panel chart-panel">
@@ -154,11 +191,86 @@
           </div>
         </section>
 
+        <section class="tab-page hidden" id="tab-comparison" data-analysis-modes="compare">
+          <div class="analysis-heading">
+            <div><span class="eyebrow">FOUR-WAY COMPARISON</span><h2>동일 조건 4전략 비교</h2><p>같은 초기자본·거래일·비용 조건으로 SOXX, SOXL, 전고점 매매법, 무한매수법 V4를 비교합니다.</p></div>
+            <div class="series-legend" id="comparisonLegend" aria-label="비교 전략 범례">
+              <span class="series previous-high">전고점 매매법</span><span class="series lth-v4">무한매수 V4</span><span class="series soxx">SOXX</span><span class="series soxl">SOXL</span>
+            </div>
+          </div>
+          <div class="empty-mini" id="comparisonEmpty">4전략 비교 모드로 백테스트를 실행하면 성과표와 비교 차트가 표시됩니다.</div>
+          <div class="hidden" id="comparisonResults">
+            <div class="summary-grid comparison-summary" id="comparisonSummary"></div>
+            <article class="panel comparison-hypothesis-panel" aria-labelledby="comparisonHypothesisTitle">
+              <div class="panel-head"><div><h3 id="comparisonHypothesisTitle">핵심 가설 관찰 결과</h3><p>동일한 백테스트 표본에서 명세의 5개 가설 조건이 관찰됐는지 확인합니다.</p></div><span class="observation-badge neutral">인과 증명 아님</span></div>
+              <div class="hypothesis-disclaimer"><strong>읽는 법</strong><span>‘관찰됨’은 이 기간·가정에서 조건을 충족했다는 뜻이며, 전략 구조가 결과의 원인임을 증명하지 않습니다.</span></div>
+              <div class="hypothesis-grid" id="comparisonHypothesisGrid" aria-live="polite"></div>
+            </article>
+            <article class="panel comparison-matrix-panel">
+              <div class="panel-head"><div><h3>핵심 성과지표</h3><p>수익·낙폭·변동성·연도별 성과를 동일 기준으로 비교합니다.</p></div></div>
+              <div class="data-table comparison-matrix-table"><table id="comparisonMetricTable"><thead><tr id="comparisonMetricHead"><th>지표</th><th class="previous-high-text">전고점 매매법</th><th class="lth-v4-text">무한매수 V4</th><th class="soxx-text">SOXX</th><th class="soxl-text">SOXL</th></tr></thead><tbody id="comparisonMetricRows"></tbody></table></div>
+            </article>
+            <div class="analysis-chart-stack comparison-chart-stack">
+              <article class="panel analysis-chart-panel">
+                <div class="panel-head"><div><h3>4전략 자산 곡선</h3><p>일별 종가 평가금액을 함께 표시합니다.</p></div><label class="chart-toggle"><input id="comparisonEquityLogScale" type="checkbox"><span>로그 축</span></label></div>
+                <div class="analysis-chart-wrap"><canvas id="comparisonEquityChart" role="img" aria-label="4전략 자산 곡선 비교"></canvas><div class="chart-tooltip hidden" id="comparisonEquityTooltip"></div></div>
+              </article>
+              <article class="panel analysis-chart-panel">
+                <div class="panel-head"><div><h3>4전략 Drawdown</h3><p>각 전략의 종가 기준 고점 대비 낙폭을 비교합니다.</p></div></div>
+                <div class="analysis-chart-wrap"><canvas id="comparisonDrawdownChart" role="img" aria-label="4전략 낙폭 비교"></canvas><div class="chart-tooltip hidden" id="comparisonDrawdownTooltip"></div></div>
+              </article>
+            </div>
+            <article class="panel comparison-table-panel">
+              <div class="panel-head"><div><h3>연도별 성과</h3><p>한 해 동안의 수익률과 전략별 우위를 비교합니다.</p></div></div>
+              <div class="summary-grid comparison-year-summary" id="comparisonYearSummary"></div>
+              <div class="data-table comparison-wide-table"><table id="comparisonYearTable"><thead><tr id="comparisonYearHead"><th>연도</th><th>SOXX</th><th>SOXL</th><th>전고점 매매법</th><th>무한매수법 V4</th></tr></thead><tbody id="comparisonYearRows"></tbody></table></div>
+            </article>
+            <article class="panel comparison-table-panel">
+              <div class="panel-head"><div><h3>기간·시장 국면별 검증</h3><p>전체·초기·중간·최근 구간과 주요 하락장의 성과를 분리해 확인합니다.</p></div></div>
+              <div class="data-table comparison-wide-table"><table id="comparisonRegimeTable"><thead><tr id="comparisonRegimeHead"><th>구간</th><th>시작</th><th>종료</th><th>SOXX</th><th>SOXL</th><th>전고점</th><th>무한매수 V4</th></tr></thead><tbody id="comparisonRegimeRows"></tbody></table></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="tab-page hidden" id="tab-previous-high" data-analysis-modes="previous_high compare">
+          <div class="analysis-heading">
+            <div><span class="eyebrow">PREVIOUS-HIGH ANALYTICS</span><h2>전고점 매매법 심층 분석</h2><p>하락 깊이에 따른 SOXL 비중과 실질 레버리지, 라운드 위험을 추적합니다.</p></div>
+            <span class="strategy-chip previous-high-chip">전고점 매매법</span>
+          </div>
+          <div class="empty-mini" id="previousHighAnalyticsEmpty">전고점 매매법 또는 4전략 비교를 실행하면 전용 분석이 표시됩니다.</div>
+          <div class="hidden" id="previousHighAnalyticsResults">
+            <div class="summary-grid previous-high-summary" id="previousHighSummary"></div>
+            <div class="analysis-note" id="previousHighAnalysisNote"></div>
+            <div class="analysis-chart-stack previous-high-chart-stack">
+              <article class="panel analysis-chart-panel">
+                <div class="panel-head"><div><h3>SOXL 비중</h3><p>시간에 따라 레버리지 자산 비중이 어떻게 변하는지 표시합니다.</p></div><strong id="maxSoxlWeightValue">-</strong></div>
+                <div class="analysis-chart-wrap"><canvas id="previousHighSoxlWeightChart" role="img" aria-label="전고점 매매법 SOXL 비중"></canvas><div class="chart-tooltip hidden" id="previousHighSoxlWeightTooltip"></div></div>
+              </article>
+              <article class="panel analysis-chart-panel">
+                <div class="panel-head"><div><h3>실질 레버리지</h3><p>SOXX 비중 × 1 + SOXL 비중 × 3으로 계산한 일별 노출입니다.</p></div><strong id="maxEffectiveLeverageValue">-</strong></div>
+                <div class="analysis-chart-wrap"><canvas id="previousHighLeverageChart" role="img" aria-label="전고점 매매법 실질 레버리지"></canvas><div class="chart-tooltip hidden" id="previousHighLeverageTooltip"></div></div>
+              </article>
+              <article class="panel analysis-chart-panel">
+                <div class="panel-head"><div><h3>SOXX 낙폭 vs SOXL 비중</h3><p>기초자산 낙폭이 깊어질 때 포트폴리오 구조가 어떻게 변하는지 보여줍니다.</p></div></div>
+                <div class="analysis-chart-wrap"><canvas id="previousHighDrawdownWeightChart" role="img" aria-label="SOXX 낙폭과 SOXL 비중 관계"></canvas><div class="chart-tooltip hidden" id="previousHighDrawdownWeightTooltip"></div></div>
+              </article>
+            </div>
+            <article class="panel comparison-table-panel">
+              <div class="panel-head"><div><h3>낙폭별 포트폴리오 구조</h3><p>SOXX 낙폭 구간별 평균 비중·레버리지·평가손익입니다.</p></div></div>
+              <div class="data-table previous-high-bucket-table"><table id="drawdownBucketTable"><thead><tr id="drawdownBucketHead"><th>SOXX 낙폭</th><th>관찰일</th><th>SOXX 비중</th><th>SOXL 비중</th><th>현금 비중</th><th>실질 레버리지</th><th>포트폴리오 손익</th></tr></thead><tbody id="drawdownBucketRows"></tbody></table></div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><div><h3>전략 진단</h3><p>SOXX 소진, 전환 횟수, 데이터 정렬 상태를 확인합니다.</p></div></div>
+              <dl class="metric-list" id="previousHighDiagnostics"></dl>
+            </article>
+          </div>
+        </section>
+
         <section class="tab-page" id="tab-candles">
-          <div class="empty-mini" id="candleEmpty">백테스트를 실행하면 선택 기간의 실제 OHLC 캔들과 거래량을 확인할 수 있습니다.</div>
+          <div class="empty-mini" id="candleEmpty">백테스트를 실행하면 선택 기간의 입력 OHLC 캔들과 거래량을 확인할 수 있습니다.</div>
           <div class="hidden" id="candleContent">
             <div class="candle-heading">
-              <div><span class="eyebrow">ACTUAL OHLCV</span><h2 id="candleTitle">캔들 차트</h2><p>분할은 반영하지만 배당은 소급 보정하지 않은 실제 시가, 고가, 저가, 종가입니다.</p></div>
+              <div><span class="eyebrow" id="candleBasisEyebrow">INPUT OHLCV</span><h2 id="candleTitle">캔들 차트</h2><p id="candleBasisDescription">입력 CSV의 가격 조정 기준을 확인한 뒤 표시합니다.</p></div>
               <div class="candle-controls" aria-label="캔들 표시 범위">
                 <button class="button secondary" id="candlePrev" type="button" aria-label="이전 구간">← 이전</button>
                 <label><span>표시 구간</span><select id="candleRange"><option value="60">60거래일</option><option value="120" selected>120거래일</option><option value="252">252거래일</option><option value="0">전체 기간</option></select></label>
@@ -172,19 +284,19 @@
               </div>
               <div class="canvas-wrap candle"><canvas id="candlestickChart" role="img" aria-label="선택 기간 OHLC 캔들 차트"></canvas><div class="chart-tooltip candle-tooltip hidden" id="candleTooltip"></div></div>
             </article>
-            <div class="analysis-note">가격축과 캔들은 증권사 가격 차트와 비교 가능한 분할 반영·배당 미보정 OHLC 기준입니다. 종가가 시가보다 높으면 빨강, 낮으면 파랑으로 표시합니다. 거래량은 CSV의 일별 원자료이며, 긴 기간의 `전체 기간` 보기는 흐름 확인용이므로 세부 캔들은 60·120·252거래일 보기로 확인하세요.</div>
+            <div class="analysis-note" id="candleBasisNote">입력 CSV의 가격 기준과 조정 여부를 결과 메타데이터에서 확인합니다. 종가가 시가보다 높으면 빨강, 낮으면 파랑으로 표시합니다.</div>
           </div>
         </section>
 
         <section class="tab-page" id="tab-executions">
           <div class="table-toolbar"><div><h2>체결 내역</h2><p>모든 현금·수량·T값 변화를 추적합니다.</p></div><div class="table-filters"><input id="executionSearch" type="search" placeholder="날짜·라벨 검색"><select id="executionSide"><option value="">전체 매매</option><option value="buy">매수</option><option value="sell">매도</option></select></div></div>
-          <div class="data-table"><table><thead><tr><th>#</th><th>날짜</th><th>모드</th><th>매매</th><th>주문</th><th>구분</th><th>주문가</th><th>체결가</th><th>수량</th><th>거래금액</th><th>비용</th><th>T 전</th><th>T 후</th></tr></thead><tbody id="executionRows"></tbody></table></div>
+          <div class="data-table"><table id="executionTable"><thead><tr id="executionHead"><th>#</th><th>날짜</th><th>모드</th><th>매매</th><th>주문</th><th>구분</th><th>주문가</th><th>체결가</th><th>수량</th><th>거래금액</th><th>비용</th><th>T 전</th><th>T 후</th></tr></thead><tbody id="executionRows"></tbody></table></div>
           <button class="button secondary load-more hidden" id="executionMore">100건 더 보기</button>
         </section>
 
         <section class="tab-page" id="tab-rounds">
           <div class="table-toolbar"><div><h2>완료 라운드</h2><p>단리는 운용원금과 실제 라운드 시작자산을 구분합니다.</p></div></div>
-          <div class="data-table"><table><thead><tr><th>회차</th><th>시작</th><th>종료</th><th>거래일</th><th>운용원금</th><th>시작자산</th><th>종료자산</th><th>손익</th><th>수익률</th><th>종가 MDD</th><th>종목 거치식</th><th>체결</th><th>비용</th></tr></thead><tbody id="roundRows"></tbody></table></div>
+          <div class="data-table"><table id="roundTable"><thead><tr id="roundHead"><th>회차</th><th>시작</th><th>종료</th><th>거래일</th><th>운용원금</th><th>시작자산</th><th>종료자산</th><th>손익</th><th>수익률</th><th>종가 MDD</th><th>종목 거치식</th><th>체결</th><th>비용</th></tr></thead><tbody id="roundRows"></tbody></table></div>
         </section>
 
         <section class="tab-page" id="tab-round-starts">
@@ -237,7 +349,48 @@
         </section>
 
         <section class="tab-page" id="tab-periods">
-          <div class="period-grid"><article class="panel"><div class="panel-head"><h2>연도별 수익률</h2></div><div class="data-table compact"><table><thead><tr><th>연도</th><th>종료자산</th><th>수익률</th></tr></thead><tbody id="yearRows"></tbody></table></div></article><article class="panel"><div class="panel-head"><h2>월별 수익률</h2></div><div class="data-table compact tall"><table><thead><tr><th>월</th><th>종료자산</th><th>수익률</th></tr></thead><tbody id="monthRows"></tbody></table></div></article></div>
+          <div class="period-grid"><article class="panel"><div class="panel-head"><h2>연도별 수익률</h2></div><div class="data-table compact"><table id="yearTable"><thead><tr id="yearHead"><th>연도</th><th>종료자산</th><th>수익률</th></tr></thead><tbody id="yearRows"></tbody></table></div></article><article class="panel"><div class="panel-head"><h2>월별 수익률</h2></div><div class="data-table compact tall"><table id="monthTable"><thead><tr id="monthHead"><th>월</th><th>종료자산</th><th>수익률</th></tr></thead><tbody id="monthRows"></tbody></table></div></article></div>
+        </section>
+
+        <section class="tab-page hidden" id="tab-sweep" data-analysis-modes="previous_high compare">
+          <div class="analysis-heading">
+            <div><span class="eyebrow">PARAMETER ROBUSTNESS</span><h2>전고점 매매법 파라미터 탐색</h2><p>단일 최고값보다 주변 조합과 여러 기간에서 성과가 유지되는 넓은 안정 구간을 찾습니다.</p></div>
+          </div>
+          <form class="panel sweep-form" id="parameterSweepForm">
+            <div class="panel-head"><div><h3>탐색 후보</h3><p>현재 원금·기간·비용 설정을 공통으로 적용합니다.</p></div><div class="sweep-actions"><button class="button secondary" id="downloadSweepCsv" type="button" disabled>결과 CSV</button><button class="button primary" id="runParameterSweep" type="submit">파라미터 탐색 실행</button></div></div>
+            <fieldset class="sweep-candidates" id="sweepIntervalCandidates">
+              <legend>매매 간격</legend>
+              <div class="choice-row wrap"><label><input type="checkbox" name="sweep_trigger_intervals" value="2.5" checked><span>2.5%</span></label><label><input type="checkbox" name="sweep_trigger_intervals" value="3" checked><span>3%</span></label><label><input type="checkbox" name="sweep_trigger_intervals" value="4" checked><span>4%</span></label><label><input type="checkbox" name="sweep_trigger_intervals" value="5" checked><span>5%</span></label><label><input type="checkbox" name="sweep_trigger_intervals" value="6" checked><span>6%</span></label><label><input type="checkbox" name="sweep_trigger_intervals" value="7.5" checked><span>7.5%</span></label><label><input type="checkbox" name="sweep_trigger_intervals" value="10" checked><span>10%</span></label></div>
+            </fieldset>
+            <fieldset class="sweep-candidates" id="sweepDivisionCandidates">
+              <legend>분할 수</legend>
+              <div class="choice-row wrap"><label><input type="checkbox" name="sweep_divisions" value="10" checked><span>10</span></label><label><input type="checkbox" name="sweep_divisions" value="15" checked><span>15</span></label><label><input type="checkbox" name="sweep_divisions" value="20" checked><span>20</span></label><label><input type="checkbox" name="sweep_divisions" value="25" checked><span>25</span></label><label><input type="checkbox" name="sweep_divisions" value="30" checked><span>30</span></label><label><input type="checkbox" name="sweep_divisions" value="40" checked><span>40</span></label></div>
+            </fieldset>
+            <label class="check-row"><input type="checkbox" name="sweep_subperiod_validation" checked><span>초기·중간·최근 1/3 기간 분할 검증 포함</span></label>
+          </form>
+          <div class="empty-mini sweep-empty" id="parameterSweepEmpty">탐색을 실행하면 조합별 성과와 주변 파라미터 안정성이 표시됩니다.</div>
+          <div class="hidden" id="parameterSweepResults">
+            <div class="summary-grid sweep-stability-summary" id="sweepStabilitySummary"></div>
+            <div class="analysis-note" id="sweepStabilityNote"></div>
+            <div class="analysis-chart-stack sweep-chart-stack">
+              <article class="panel analysis-chart-panel heatmap-panel">
+                <div class="panel-head"><div><h3>CAGR 민감도</h3><p>매매 간격 × 분할 수 조합별 연복리 수익률입니다.</p></div></div>
+                <div class="analysis-chart-wrap heatmap-wrap"><canvas id="sweepCagrChart" role="img" aria-label="파라미터 조합별 CAGR 히트맵"></canvas><div class="chart-tooltip hidden" id="sweepCagrTooltip"></div></div>
+              </article>
+              <article class="panel analysis-chart-panel heatmap-panel">
+                <div class="panel-head"><div><h3>MDD 민감도</h3><p>매매 간격 × 분할 수 조합별 종가 최대낙폭입니다.</p></div></div>
+                <div class="analysis-chart-wrap heatmap-wrap"><canvas id="sweepMddChart" role="img" aria-label="파라미터 조합별 MDD 히트맵"></canvas><div class="chart-tooltip hidden" id="sweepMddTooltip"></div></div>
+              </article>
+              <article class="panel analysis-chart-panel heatmap-panel">
+                <div class="panel-head"><div><h3>CAGR / |MDD| 민감도</h3><p>단일 수익률보다 위험 대비 효율과 주변 조합의 연속성을 확인합니다.</p></div></div>
+                <div class="analysis-chart-wrap heatmap-wrap"><canvas id="sweepCalmarChart" role="img" aria-label="파라미터 조합별 CAGR MDD 비율 히트맵"></canvas><div class="chart-tooltip hidden" id="sweepCalmarTooltip"></div></div>
+              </article>
+            </div>
+            <article class="panel sweep-results-panel">
+              <div class="panel-head"><div><h3>전체 조합 결과</h3><p>성과, 레버리지, 하위 기간 견고성 점수를 함께 확인합니다.</p></div></div>
+              <div class="data-table sweep-results-table"><table id="sweepResultTable"><thead><tr id="sweepResultHead"><th>매매 간격</th><th>분할 수</th><th>최종 자산</th><th>CAGR</th><th>MDD</th><th>CAGR / |MDD|</th><th>Sharpe</th><th>최대 SOXL 비중</th><th>최대 레버리지</th><th>하위기간 최저 성과</th><th>주변 안정성</th></tr></thead><tbody id="sweepResultRows"></tbody></table></div>
+            </article>
+          </div>
         </section>
 
         <section class="tab-page" id="tab-random">
