@@ -327,6 +327,7 @@ function syncAnalysisMode(refreshDatasets = true) {
 function syncRandomModeCopy(mode = selectedAnalysisMode()) {
   const form = $("#backtestForm");
   const compare = mode === "compare";
+  $("#randomLayout")?.classList.toggle("strategy-mode", compare);
   $("#randomTitle").textContent = compare ? "6전략 랜덤 기간 비교" : "랜덤 기간 견고성 비교";
   $("#randomDescription").textContent = compare
     ? "같은 무작위 기간에서 두 매매법과 네 거치식의 수익률·MDD를 비교합니다."
@@ -1238,6 +1239,7 @@ function configureCandleBars(result) {
 function renderCharts() {
   drawEquity(); drawDrawdown(); drawCandlestick(); drawRoundStartCharts();
   drawComparisonCharts(); drawPreviousHighCharts();
+  drawStrategyRandomCharts();
   if (app.sweepResult) renderSweepCharts();
 }
 
@@ -1475,6 +1477,11 @@ function renderRandom(result) {
 
 function renderStrategyRandom(result) {
   const config = result.config;
+  const distributionStats = strategyRandomDistributionStats(result);
+  const byMedianReturn = [...distributionStats].sort((left, right) => right.returnStats.median - left.returnStats.median)[0];
+  const byDownsideReturn = [...distributionStats].sort((left, right) => right.returnStats.p10 - left.returnStats.p10)[0];
+  const byMedianMdd = [...distributionStats].sort((left, right) => right.mddStats.median - left.mddStats.median)[0];
+  const byTopThree = [...distributionStats].sort((left, right) => right.topThreeRate - left.topThreeRate)[0];
   const summaryByKey = Object.fromEntries(result.summary.map(item => [item.key, item]));
   const cards = result.summary.map(item => {
     const style = STRATEGY_SERIES[item.key] || {};
@@ -1509,10 +1516,186 @@ function renderStrategyRandom(result) {
       <div class="strategy-random-config"><span>V4 SOXL ${config.v4_split_count}분할</span><span>전고점 ${number(config.trigger_interval_pct, 2)}% × ${config.divisions}분할</span><span>시드 ${seedText}</span></div>
     </div>
     <div class="random-summary-grid strategy-random-grid">${cards}</div>
+    <section class="random-insight-strip" aria-label="복합 성과 요약">
+      <div><small>중앙 수익률 1위</small><strong>${escapeHtml(byMedianReturn.label)}</strong><span>${percent(byMedianReturn.returnStats.median, 2, true)}</span></div>
+      <div><small>하방 P10 수익률 1위</small><strong>${escapeHtml(byDownsideReturn.label)}</strong><span>${percent(byDownsideReturn.returnStats.p10, 2, true)}</span></div>
+      <div><small>중앙 MDD 최소</small><strong>${escapeHtml(byMedianMdd.label)}</strong><span>${percent(byMedianMdd.mddStats.median, 2)}</span></div>
+      <div><small>상위 3위 진입률 1위</small><strong>${escapeHtml(byTopThree.label)}</strong><span>${percent(byTopThree.topThreeRate, 1)}</span></div>
+    </section>
+    <section class="random-analysis-stack" aria-label="6전략 랜덤 결과 분포 분석">
+      <article class="panel random-analysis-panel">
+        <div class="panel-head"><div><h3>전체 샘플 수익률 분포</h3><p>수염은 P10–P90, 상자는 P25–P75, 세로선은 중앙값, 점은 평균입니다. 극단값에 끌리는 평균과 일반적인 구간을 함께 비교합니다.</p></div></div>
+        <div class="random-analysis-chart-wrap"><canvas id="randomReturnDistributionChart" role="img" aria-label="전략별 랜덤 기간 수익률 분포"></canvas><div class="chart-tooltip hidden" id="randomReturnDistributionTooltip"></div></div>
+      </article>
+      <article class="panel random-analysis-panel">
+        <div class="panel-head"><div><h3>전체 샘플 종가 MDD 분포</h3><p>0%에 가까울수록 낙폭이 작습니다. 평균 수익률이 비슷해도 일반적인 낙폭과 나쁜 10% 구간의 위험이 얼마나 다른지 확인합니다.</p></div></div>
+        <div class="random-analysis-chart-wrap"><canvas id="randomMddDistributionChart" role="img" aria-label="전략별 랜덤 기간 MDD 분포"></canvas><div class="chart-tooltip hidden" id="randomMddDistributionTooltip"></div></div>
+      </article>
+      <article class="panel random-analysis-panel">
+        <div class="panel-head"><div><h3>샘플별 수익 순위 확률</h3><p>각 전략이 같은 구간의 여섯 전략 중 몇 위였는지를 누적 비율로 표시합니다. 특정 대박 구간보다 성과의 일관성을 확인하는 지표입니다.</p></div><div class="rank-probability-legend"><span class="rank-1">1위</span><span class="rank-2">2위</span><span class="rank-3">3위</span><span class="rank-4">4위</span><span class="rank-5">5위</span><span class="rank-6">6위</span></div></div>
+        <div class="random-analysis-chart-wrap rank"><canvas id="randomRankProbabilityChart" role="img" aria-label="전략별 랜덤 기간 수익 순위 확률"></canvas><div class="chart-tooltip hidden" id="randomRankProbabilityTooltip"></div></div>
+      </article>
+    </section>
     <article class="panel strategy-random-table-panel">
       <div class="panel-head"><div><h3>랜덤 구간별 수익률·MDD</h3><p>각 칸의 큰 값은 총수익률, 아래 값은 종가 MDD와 구간 내 수익 순위입니다. 공동 1위는 승률을 균등 배분합니다.</p></div></div>
       <div class="data-table strategy-random-table"><table><thead><tr><th>#</th><th>기간</th><th>거래일</th>${headers}</tr></thead><tbody>${rows}</tbody></table></div>
     </article>`;
+  drawStrategyRandomCharts();
+  [["#randomReturnDistributionChart", "#randomReturnDistributionTooltip"], ["#randomMddDistributionChart", "#randomMddDistributionTooltip"]].forEach(([canvas, tooltip]) => {
+    $(canvas).addEventListener("pointermove", event => showRandomDistributionTooltip(event, tooltip));
+    $(canvas).addEventListener("pointerleave", () => $(tooltip).classList.add("hidden"));
+  });
+  $("#randomRankProbabilityChart").addEventListener("pointermove", showRandomRankTooltip);
+  $("#randomRankProbabilityChart").addEventListener("pointerleave", () => $("#randomRankProbabilityTooltip").classList.add("hidden"));
+}
+
+function quantile(sortedValues, percentile) {
+  if (!sortedValues.length) return 0;
+  const index = (sortedValues.length - 1) * percentile;
+  const lower = Math.floor(index), upper = Math.ceil(index);
+  if (lower === upper) return sortedValues[lower];
+  return sortedValues[lower] + (sortedValues[upper] - sortedValues[lower]) * (index - lower);
+}
+
+function distributionSummary(values) {
+  const sorted = values.map(Number).filter(Number.isFinite).sort((left, right) => left - right);
+  const mean = sorted.reduce((total, value) => total + value, 0) / Math.max(sorted.length, 1);
+  return {
+    min: sorted[0] ?? 0,
+    p10: quantile(sorted, .10),
+    q1: quantile(sorted, .25),
+    median: quantile(sorted, .50),
+    mean,
+    q3: quantile(sorted, .75),
+    p90: quantile(sorted, .90),
+    max: sorted.at(-1) ?? 0,
+  };
+}
+
+function strategyRandomDistributionStats(result = app.randomResult) {
+  if (!result?.rows?.length) return [];
+  return result.strategy_order.map(key => {
+    const values = result.rows.map(row => row.strategies[key]);
+    const label = STRATEGY_SERIES[key]?.label || result.summary.find(item => item.key === key)?.label || key;
+    const rankRates = Array.from({ length: 6 }, (_, index) => values.filter(item => Number(item.return_rank) === index + 1).length / values.length * 100);
+    return {
+      key,
+      label,
+      color: STRATEGY_SERIES[key]?.color || "#68756e",
+      returnStats: distributionSummary(values.map(item => item.return_rate)),
+      mddStats: distributionSummary(values.map(item => item.close_mdd)),
+      rankRates,
+      topThreeRate: rankRates.slice(0, 3).reduce((total, value) => total + value, 0),
+    };
+  });
+}
+
+function drawRandomDistributionChart(canvas, metricKey) {
+  if (!canvas || !canvas.offsetParent || !app.randomResult) return;
+  const strategies = strategyRandomDistributionStats();
+  if (!strategies.length) return;
+  const { context: ctx, width, height } = fitCanvas(canvas);
+  const padding = { left: width < 680 ? 112 : 145, right: 34, top: 26, bottom: 36 };
+  const plotWidth = Math.max(width - padding.left - padding.right, 1);
+  const plotHeight = Math.max(height - padding.top - padding.bottom, 1);
+  const summaries = strategies.map(item => item[metricKey]);
+  let low = Math.min(0, ...summaries.flatMap(item => [item.p10, item.mean]));
+  let high = Math.max(0, ...summaries.flatMap(item => [item.p90, item.mean]));
+  const spread = Math.max(high - low, 1);
+  low -= spread * .04; high += spread * .04;
+  const valueX = value => padding.left + Math.max(0, Math.min(1, (Number(value) - low) / (high - low))) * plotWidth;
+  const rowY = index => padding.top + plotHeight * (index + .5) / strategies.length;
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = "10px -apple-system, sans-serif";
+  ctx.textBaseline = "middle";
+  for (let index = 0; index <= 4; index++) {
+    const value = low + (high - low) * index / 4;
+    const x = valueX(value);
+    ctx.strokeStyle = "#e2e9e5"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, padding.top - 5); ctx.lineTo(x, height - padding.bottom + 5); ctx.stroke();
+    ctx.fillStyle = "#77827c"; ctx.textAlign = index === 0 ? "left" : index === 4 ? "right" : "center"; ctx.fillText(`${number(value, 1)}%`, x, height - 12);
+  }
+  if (low < 0 && high > 0) {
+    const zeroX = valueX(0); ctx.strokeStyle = "#9eaaa4"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(zeroX, padding.top - 6); ctx.lineTo(zeroX, height - padding.bottom + 5); ctx.stroke();
+  }
+  const rows = strategies.map((strategy, index) => {
+    const stats = strategy[metricKey], y = rowY(index), boxHeight = Math.min(22, plotHeight / strategies.length * .48);
+    ctx.strokeStyle = "#edf1ef"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padding.left, y + plotHeight / strategies.length / 2); ctx.lineTo(width - padding.right, y + plotHeight / strategies.length / 2); ctx.stroke();
+    ctx.fillStyle = strategy.color; ctx.textAlign = "right"; ctx.font = "700 11px -apple-system, sans-serif"; ctx.fillText(strategy.label, padding.left - 11, y);
+    ctx.strokeStyle = strategy.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(valueX(stats.p10), y); ctx.lineTo(valueX(stats.p90), y); ctx.stroke();
+    [stats.p10, stats.p90].forEach(value => { const x = valueX(value); ctx.beginPath(); ctx.moveTo(x, y - boxHeight * .32); ctx.lineTo(x, y + boxHeight * .32); ctx.stroke(); });
+    ctx.save(); ctx.globalAlpha = .2; ctx.fillStyle = strategy.color; ctx.fillRect(valueX(stats.q1), y - boxHeight / 2, Math.max(valueX(stats.q3) - valueX(stats.q1), 1), boxHeight); ctx.restore();
+    ctx.strokeStyle = strategy.color; ctx.lineWidth = 1.5; ctx.strokeRect(valueX(stats.q1), y - boxHeight / 2, Math.max(valueX(stats.q3) - valueX(stats.q1), 1), boxHeight);
+    ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(valueX(stats.median), y - boxHeight / 2); ctx.lineTo(valueX(stats.median), y + boxHeight / 2); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.strokeStyle = strategy.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(valueX(stats.mean), y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    return { ...strategy, stats, y };
+  });
+  canvas._randomDistribution = { rows, metricKey, padding, width, height, rowSpacing: plotHeight / strategies.length };
+}
+
+function drawRandomRankProbabilityChart() {
+  const canvas = $("#randomRankProbabilityChart");
+  if (!canvas || !canvas.offsetParent || !app.randomResult) return;
+  const strategies = strategyRandomDistributionStats();
+  if (!strategies.length) return;
+  const { context: ctx, width, height } = fitCanvas(canvas);
+  const padding = { left: width < 680 ? 112 : 145, right: 25, top: 26, bottom: 36 };
+  const plotWidth = Math.max(width - padding.left - padding.right, 1);
+  const plotHeight = Math.max(height - padding.top - padding.bottom, 1);
+  const rankColors = ["#08775b", "#39a986", "#8acbb6", "#d5a53f", "#d97d55", "#c43e45"];
+  const valueX = value => padding.left + value / 100 * plotWidth;
+  const rowY = index => padding.top + plotHeight * (index + .5) / strategies.length;
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = "10px -apple-system, sans-serif"; ctx.textBaseline = "middle";
+  for (let value = 0; value <= 100; value += 25) {
+    const x = valueX(value); ctx.strokeStyle = "#e2e9e5"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, padding.top - 5); ctx.lineTo(x, height - padding.bottom + 5); ctx.stroke();
+    ctx.fillStyle = "#77827c"; ctx.textAlign = value === 0 ? "left" : value === 100 ? "right" : "center"; ctx.fillText(`${value}%`, x, height - 12);
+  }
+  const rows = strategies.map((strategy, index) => {
+    const y = rowY(index), barHeight = Math.min(25, plotHeight / strategies.length * .52);
+    ctx.fillStyle = strategy.color; ctx.textAlign = "right"; ctx.font = "700 11px -apple-system, sans-serif"; ctx.fillText(strategy.label, padding.left - 11, y);
+    let cumulative = 0;
+    const segments = strategy.rankRates.map((rate, rankIndex) => {
+      const start = cumulative; cumulative += rate;
+      const x = valueX(start), segmentWidth = Math.max(valueX(cumulative) - x, 0);
+      ctx.fillStyle = rankColors[rankIndex]; ctx.fillRect(x, y - barHeight / 2, segmentWidth, barHeight);
+      if (segmentWidth > 40) { ctx.fillStyle = rankIndex >= 3 ? "#513c2c" : "#fff"; ctx.textAlign = "center"; ctx.font = "700 9px -apple-system, sans-serif"; ctx.fillText(`${number(rate, 1)}%`, x + segmentWidth / 2, y); }
+      return { rank: rankIndex + 1, rate, start, end: cumulative };
+    });
+    return { ...strategy, y, segments };
+  });
+  canvas._randomRanks = { rows, padding, width, height, rowSpacing: plotHeight / strategies.length, valueX };
+}
+
+function drawStrategyRandomCharts() {
+  if (!app.randomResult || app.randomResult.result_type !== "strategy_random_comparison") return;
+  drawRandomDistributionChart($("#randomReturnDistributionChart"), "returnStats");
+  drawRandomDistributionChart($("#randomMddDistributionChart"), "mddStats");
+  drawRandomRankProbabilityChart();
+}
+
+function showRandomDistributionTooltip(event, tooltipSelector) {
+  const canvas = event.currentTarget, info = canvas._randomDistribution;
+  if (!info?.rows?.length) return;
+  const rect = canvas.getBoundingClientRect(), localY = event.clientY - rect.top, localX = event.clientX - rect.left;
+  const row = info.rows.reduce((best, item) => Math.abs(item.y - localY) < Math.abs(best.y - localY) ? item : best);
+  const tooltip = $(tooltipSelector);
+  if (Math.abs(row.y - localY) > info.rowSpacing * .48) { tooltip.classList.add("hidden"); return; }
+  const stats = row.stats;
+  tooltip.innerHTML = `<strong style="color:${row.color}">${escapeHtml(row.label)}</strong><br>최저 ${percent(stats.min, 2, true)} · P10 ${percent(stats.p10, 2, true)}<br>P25 ${percent(stats.q1, 2, true)} · 중앙 ${percent(stats.median, 2, true)} · 평균 ${percent(stats.mean, 2, true)}<br>P75 ${percent(stats.q3, 2, true)} · P90 ${percent(stats.p90, 2, true)} · 최고 ${percent(stats.max, 2, true)}`;
+  tooltip.style.left = `${Math.max(6, Math.min(localX + 12, rect.width - 285))}px`; tooltip.style.top = `${Math.max(6, Math.min(localY - 58, rect.height - 105))}px`; tooltip.classList.remove("hidden");
+}
+
+function showRandomRankTooltip(event) {
+  const canvas = event.currentTarget, info = canvas._randomRanks;
+  if (!info?.rows?.length) return;
+  const rect = canvas.getBoundingClientRect(), localY = event.clientY - rect.top, localX = event.clientX - rect.left;
+  const row = info.rows.reduce((best, item) => Math.abs(item.y - localY) < Math.abs(best.y - localY) ? item : best);
+  const tooltip = $("#randomRankProbabilityTooltip");
+  if (Math.abs(row.y - localY) > info.rowSpacing * .48 || localX < info.padding.left) { tooltip.classList.add("hidden"); return; }
+  const ratePosition = Math.max(0, Math.min(100, (localX - info.padding.left) / Math.max(info.width - info.padding.left - info.padding.right, 1) * 100));
+  const segment = row.segments.find(item => ratePosition >= item.start && ratePosition <= item.end) || row.segments.at(-1);
+  tooltip.innerHTML = `<strong style="color:${row.color}">${escapeHtml(row.label)}</strong><br>${segment.rank}위 확률 ${percent(segment.rate, 1)}<br>상위 3위 확률 ${percent(row.topThreeRate, 1)}<br>${row.rankRates.map((rate, index) => `${index + 1}위 ${percent(rate, 1)}`).join(" · ")}`;
+  tooltip.style.left = `${Math.max(6, Math.min(localX + 12, rect.width - 300))}px`; tooltip.style.top = `${Math.max(6, Math.min(localY - 55, rect.height - 92))}px`; tooltip.classList.remove("hidden");
 }
 
 function moveCandleWindow(direction) {
