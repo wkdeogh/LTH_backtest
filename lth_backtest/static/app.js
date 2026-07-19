@@ -42,6 +42,7 @@ const STRATEGY_SERIES = Object.freeze({
   qld_buy_hold: { key: "qld_buy_hold", label: "QLD 거치식", color: "#d18a18", lineWidth: 2, dash: [] },
 });
 const SERIES_CLASS = Object.freeze({ previous_high: "previous-high", infinite_v4: "lth-v4", soxx_buy_hold: "soxx", soxl_buy_hold: "soxl", tqqq_buy_hold: "tqqq", qld_buy_hold: "qld" });
+const RANDOM_COMBINATION_COLORS = Object.freeze(["#7651b8", "#08775b", "#c43e45", "#2865d5", "#008c9e", "#d18a18"]);
 
 function comparisonSeries(comparison, keys = comparison?.strategy_order || Object.keys(STRATEGY_SERIES)) {
   return keys.filter(key => STRATEGY_SERIES[key]).map(key => {
@@ -327,7 +328,7 @@ function syncAnalysisMode(refreshDatasets = true) {
 function syncRandomModeCopy(mode = selectedAnalysisMode()) {
   const form = $("#backtestForm");
   const compare = mode === "compare";
-  $("#randomLayout")?.classList.toggle("strategy-mode", compare);
+  $("#randomLayout")?.classList.toggle("strategy-mode", mode === "lth_v4" || compare);
   $("#randomTitle").textContent = compare ? "6전략 랜덤 기간 비교" : "랜덤 기간 견고성 비교";
   $("#randomDescription").textContent = compare
     ? "같은 무작위 기간에서 두 매매법과 네 거치식의 수익률·MDD를 비교합니다."
@@ -351,7 +352,7 @@ function syncUniformSamplingControls(mode = selectedAnalysisMode()) {
   const form = $("#randomForm");
   if (!form) return;
   const checkbox = form.elements.uniform_start_sampling;
-  const active = mode === "compare" && Boolean(checkbox?.checked) && !checkbox.disabled;
+  const active = (mode === "lth_v4" || mode === "compare") && Boolean(checkbox?.checked) && !checkbox.disabled;
   form.elements.max_days.disabled = active;
   form.elements.seed.disabled = active;
   form.elements.max_days.closest("label")?.classList.toggle("disabled", active);
@@ -1424,7 +1425,7 @@ async function runRandom(event) {
   const symbols = raw.getAll("symbols"), splits = raw.getAll("splits").map(Number);
   const strategyComparison = selectedAnalysisMode() === "compare";
   if (!strategyComparison && (!symbols.length || !splits.length)) return toast("랜덤 비교 종목과 분할 수를 선택하세요.", true);
-  const body = { ...main, symbols, splits, count: Number(raw.get("count")), min_days: Number(raw.get("min_days")), max_days: raw.get("max_days") || null, seed: raw.get("seed") || null, uniform_start_sampling: strategyComparison && raw.get("uniform_start_sampling") === "on" };
+  const body = { ...main, symbols, splits, count: Number(raw.get("count")), min_days: Number(raw.get("min_days")), max_days: raw.get("max_days") || null, seed: raw.get("seed") || null, uniform_start_sampling: raw.get("uniform_start_sampling") === "on" };
   setRandomRunning(true);
   try {
     app.randomJob = await api("/api/random/jobs", body);
@@ -1484,7 +1485,109 @@ function renderRandom(result) {
     renderStrategyRandom(result);
     return;
   }
-  $("#randomResults").innerHTML = `<div class="random-summary-grid">${result.summary.map(item => `<article class="random-card"><h3>${item.symbol} · ${item.split_count}분할</h3><span class="big ${cls(item.avg_strategy_profit_rate)}">${percent(item.avg_strategy_profit_rate, 2, true)}</span><dl><div><dt>거치식 대비</dt><dd class="${cls(item.avg_excess_vs_hold)}">${percent(item.avg_excess_vs_hold, 2, true)}p</dd></div><div><dt>QLD 대비</dt><dd class="${cls(item.avg_excess_vs_qld)}">${percent(item.avg_excess_vs_qld, 2, true)}p</dd></div><div><dt>전략 승률</dt><dd>${percent(item.strategy_win_rate, 1)}</dd></div><div><dt>최악 / 최고</dt><dd>${percent(item.worst_return, 1)} / ${percent(item.best_return, 1, true)}</dd></div><div><dt>최악 MDD</dt><dd class="negative">${percent(item.worst_close_mdd, 1)}</dd></div><div><dt>고가 전용 체결</dt><dd>${item.intraday_high_only_fills.toLocaleString()}건</dd></div></dl></article>`).join("")}</div>`;
+  renderLthRandom(result);
+}
+
+function randomSeriesMeta(result, key, index = 0) {
+  const known = STRATEGY_SERIES[key];
+  const summary = result.summary?.find(item => item.key === key);
+  return {
+    key,
+    label: known?.label || summary?.label || key,
+    color: known?.color || RANDOM_COMBINATION_COLORS[index % RANDOM_COMBINATION_COLORS.length],
+  };
+}
+
+function renderLthRandom(result) {
+  const config = result.config;
+  const distributionStats = strategyRandomDistributionStats(result);
+  if (!distributionStats.length) {
+    $("#randomResults").innerHTML = '<div class="empty-mini">표시할 랜덤 비교 결과가 없습니다.</div>';
+    return;
+  }
+  const byMedianReturn = [...distributionStats].sort((left, right) => right.returnStats.median - left.returnStats.median)[0];
+  const byDownsideReturn = [...distributionStats].sort((left, right) => right.returnStats.p10 - left.returnStats.p10)[0];
+  const byMedianMdd = [...distributionStats].sort((left, right) => right.mddStats.median - left.mddStats.median)[0];
+  const byTopThree = [...distributionStats].sort((left, right) => right.topThreeRate - left.topThreeRate)[0];
+  const summaryByKey = Object.fromEntries(result.summary.map(item => [item.key, item]));
+  const seriesOrder = result.combination_order || result.summary.map(item => item.key);
+  const cards = seriesOrder.map((key, index) => {
+    const item = summaryByKey[key];
+    const style = randomSeriesMeta(result, key, index);
+    return `<article class="random-card strategy-random-card" style="border-top-color:${style.color}">
+      <div class="random-card-head"><h3>${escapeHtml(style.label)}</h3><span class="rank-badge">평균 ${item.average_return_rank}위</span></div>
+      <span class="big ${cls(item.avg_return_rate)}">${percent(item.avg_return_rate, 2, true)}</span>
+      <small>평균 수익률 · 평균 자산 ${money(item.avg_ending_equity)}</small>
+      <dl>
+        <div><dt>평균 / 최악 MDD</dt><dd class="negative">${percent(item.avg_close_mdd, 1)} / ${percent(item.worst_close_mdd, 1)}</dd></div>
+        <div><dt>수익률 1위 비율</dt><dd>${percent(item.return_win_rate, 1)}</dd></div>
+        <div><dt>최소 MDD 비율</dt><dd>${percent(item.lowest_mdd_rate, 1)}</dd></div>
+        <div><dt>평균 수익 순위</dt><dd>${number(item.avg_return_rank, 2)}위</dd></div>
+        <div><dt>양(+) 구간</dt><dd>${percent(item.positive_period_rate, 1)}</dd></div>
+        <div><dt>종목 거치식 대비</dt><dd class="${cls(item.avg_excess_vs_hold)}">${percent(item.avg_excess_vs_hold, 2, true)}p</dd></div>
+        <div><dt>QLD 거치식 대비</dt><dd class="${cls(item.avg_excess_vs_qld)}">${percent(item.avg_excess_vs_qld, 2, true)}p</dd></div>
+        <div><dt>거치식 초과 구간</dt><dd>${percent(item.strategy_win_rate, 1)}</dd></div>
+        <div><dt>최악 / 최고 수익</dt><dd>${percent(item.worst_return_rate, 1)} / ${percent(item.best_return_rate, 1, true)}</dd></div>
+        <div><dt>고가 전용 체결</dt><dd>${Number(item.intraday_high_only_fills).toLocaleString()}건</dd></div>
+      </dl>
+    </article>`;
+  }).join("");
+  const headers = seriesOrder.map((key, index) => `<th>${escapeHtml(randomSeriesMeta(result, key, index).label)}</th>`).join("");
+  const rows = result.sample_rows.map(row => `<tr>
+    <td>${row.sample}</td><td>${row.start_date}<br><small>~ ${row.end_date}</small></td><td>${Number(row.trading_days).toLocaleString()}일</td>
+    ${seriesOrder.map(key => {
+      const item = row.strategies[key];
+      return `<td><strong class="${cls(item.return_rate)}">${percent(item.return_rate, 2, true)}</strong><small>MDD ${percent(item.close_mdd, 1)} · ${item.return_rank}위</small></td>`;
+    }).join("")}
+  </tr>`).join("");
+  const uniformSampling = Boolean(config.uniform_start_sampling);
+  const requestedCount = Number(config.requested_count ?? config.count);
+  const appliedCount = Number(config.count);
+  const countText = requestedCount > appliedCount
+    ? `요청 ${requestedCount.toLocaleString()}개 중 가능한 ${appliedCount.toLocaleString()}개 구간`
+    : `${appliedCount.toLocaleString()}개 구간`;
+  const seedText = config.seed == null ? "무작위" : Number(config.seed).toLocaleString();
+  const samplingText = uniformSampling
+    ? `균등 시작일 · ${Number(config.min_days).toLocaleString()}거래일 고정`
+    : `시드 ${seedText}`;
+  const rankLegend = Array.from({ length: Math.min(seriesOrder.length, 6) }, (_, index) => `<span class="rank-${index + 1}">${index + 1}위</span>`).join("");
+  $("#randomResults").innerHTML = `
+    <div class="strategy-random-intro">
+      <div><span class="eyebrow">${uniformSampling ? "EVENLY SPACED STARTS" : "SAME RANDOM WINDOWS"}</span><h2>무한매수 랜덤 성과 요약</h2><p>${result.period.start} ~ ${result.period.end} 공통 데이터에서 ${countText}을 모든 종목·분할 조합에 동일하게 적용했습니다.</p></div>
+      <div class="strategy-random-config"><span>${config.symbols.map(escapeHtml).join(" · ")}</span><span>${config.splits.map(value => `${value}분할`).join(" · ")}</span><span>${samplingText}</span></div>
+    </div>
+    <div class="random-summary-grid strategy-random-grid">${cards}</div>
+    <section class="random-insight-strip" aria-label="복합 성과 요약">
+      <div><small>중앙 수익률 1위</small><strong>${escapeHtml(byMedianReturn.label)}</strong><span>${percent(byMedianReturn.returnStats.median, 2, true)}</span></div>
+      <div><small>하방 P10 수익률 1위</small><strong>${escapeHtml(byDownsideReturn.label)}</strong><span>${percent(byDownsideReturn.returnStats.p10, 2, true)}</span></div>
+      <div><small>중앙 MDD 최소</small><strong>${escapeHtml(byMedianMdd.label)}</strong><span>${percent(byMedianMdd.mddStats.median, 2)}</span></div>
+      <div><small>상위 3위 진입률 1위</small><strong>${escapeHtml(byTopThree.label)}</strong><span>${percent(byTopThree.topThreeRate, 1)}</span></div>
+    </section>
+    <section class="random-analysis-stack" aria-label="무한매수 랜덤 결과 분포 분석">
+      <article class="panel random-analysis-panel">
+        <div class="panel-head"><div><h3>전체 샘플 수익률 분포</h3><p>수염은 P10–P90, 상자는 P25–P75, 세로선은 중앙값, 점은 평균입니다. 종목·분할 조합별 일반적인 결과와 극단 구간을 함께 비교합니다.</p></div></div>
+        <div class="random-analysis-chart-wrap"><canvas id="randomReturnDistributionChart" role="img" aria-label="종목 분할 조합별 랜덤 기간 수익률 분포"></canvas><div class="chart-tooltip hidden" id="randomReturnDistributionTooltip"></div></div>
+      </article>
+      <article class="panel random-analysis-panel">
+        <div class="panel-head"><div><h3>전체 샘플 종가 MDD 분포</h3><p>0%에 가까울수록 낙폭이 작습니다. 수익률과 함께 조합별 일반적인 낙폭과 나쁜 10% 구간의 위험을 확인합니다.</p></div></div>
+        <div class="random-analysis-chart-wrap"><canvas id="randomMddDistributionChart" role="img" aria-label="종목 분할 조합별 랜덤 기간 MDD 분포"></canvas><div class="chart-tooltip hidden" id="randomMddDistributionTooltip"></div></div>
+      </article>
+      <article class="panel random-analysis-panel">
+        <div class="panel-head"><div><h3>샘플별 수익 순위 확률</h3><p>같은 구간에서 각 종목·분할 조합이 몇 위였는지 누적 비율로 표시합니다. 특정 구간보다 성과의 일관성을 비교합니다.</p></div><div class="rank-probability-legend">${rankLegend}</div></div>
+        <div class="random-analysis-chart-wrap rank"><canvas id="randomRankProbabilityChart" role="img" aria-label="종목 분할 조합별 랜덤 기간 수익 순위 확률"></canvas><div class="chart-tooltip hidden" id="randomRankProbabilityTooltip"></div></div>
+      </article>
+    </section>
+    <article class="panel strategy-random-table-panel">
+      <div class="panel-head"><div><h3>랜덤 구간별 수익률·MDD</h3><p>모든 조합에 동일한 거래일을 적용했으며, 각 칸에 총수익률·종가 MDD·구간 내 순위를 표시합니다.</p></div></div>
+      <div class="data-table strategy-random-table"><table><thead><tr><th>#</th><th>기간</th><th>거래일</th>${headers}</tr></thead><tbody>${rows}</tbody></table></div>
+    </article>`;
+  drawStrategyRandomCharts();
+  [["#randomReturnDistributionChart", "#randomReturnDistributionTooltip"], ["#randomMddDistributionChart", "#randomMddDistributionTooltip"]].forEach(([canvas, tooltip]) => {
+    $(canvas).addEventListener("pointermove", event => showRandomDistributionTooltip(event, tooltip));
+    $(canvas).addEventListener("pointerleave", () => $(tooltip).classList.add("hidden"));
+  });
+  $("#randomRankProbabilityChart").addEventListener("pointermove", showRandomRankTooltip);
+  $("#randomRankProbabilityChart").addEventListener("pointerleave", () => $("#randomRankProbabilityTooltip").classList.add("hidden"));
 }
 
 function renderStrategyRandom(result) {
@@ -1594,15 +1697,17 @@ function distributionSummary(values) {
 }
 
 function strategyRandomDistributionStats(result = app.randomResult) {
-  if (!result?.rows?.length) return [];
-  return result.strategy_order.map(key => {
-    const values = result.rows.map(row => row.strategies[key]);
-    const label = STRATEGY_SERIES[key]?.label || result.summary.find(item => item.key === key)?.label || key;
-    const rankRates = Array.from({ length: 6 }, (_, index) => values.filter(item => Number(item.return_rank) === index + 1).length / values.length * 100);
+  const rows = result?.result_type === "lth_random_comparison" ? result.sample_rows : result?.rows;
+  const order = result?.result_type === "lth_random_comparison" ? result.combination_order : result?.strategy_order;
+  if (!rows?.length || !order?.length) return [];
+  return order.map((key, seriesIndex) => {
+    const values = rows.map(row => row.strategies[key]).filter(Boolean);
+    const style = randomSeriesMeta(result, key, seriesIndex);
+    const rankRates = Array.from({ length: order.length }, (_, index) => values.filter(item => Number(item.return_rank) === index + 1).length / values.length * 100);
     return {
       key,
-      label,
-      color: STRATEGY_SERIES[key]?.color || "#68756e",
+      label: style.label,
+      color: style.color,
       returnStats: distributionSummary(values.map(item => item.return_rate)),
       mddStats: distributionSummary(values.map(item => item.close_mdd)),
       rankRates,
@@ -1688,7 +1793,7 @@ function drawRandomRankProbabilityChart() {
 }
 
 function drawStrategyRandomCharts() {
-  if (!app.randomResult || app.randomResult.result_type !== "strategy_random_comparison") return;
+  if (!app.randomResult || !["strategy_random_comparison", "lth_random_comparison"].includes(app.randomResult.result_type)) return;
   drawRandomDistributionChart($("#randomReturnDistributionChart"), "returnStats");
   drawRandomDistributionChart($("#randomMddDistributionChart"), "mddStats");
   drawRandomRankProbabilityChart();

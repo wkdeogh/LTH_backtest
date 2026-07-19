@@ -9,6 +9,7 @@ from lth_backtest.web import (
     _previous_high_config,
     _random_job_snapshot,
     _run_payload,
+    _run_random_payload,
     _run_strategy_random_payload,
     _run_sweep_payload,
     _start_random_job,
@@ -166,6 +167,29 @@ class PreviousHighWebApiTests(unittest.TestCase):
         self.assertEqual(result["rows"][0]["start_date"], "2024-01-01")
         self.assertEqual(result["rows"][-1]["start_date"], "2024-01-05")
         self.assertTrue(result["methodology"]["sample_count_capped"])
+
+    def test_lth_random_payload_supports_uniform_fixed_length_starts(self) -> None:
+        result = _run_random_payload({
+            "analysis_mode": "lth_v4",
+            "symbols": ["TQQQ", "SOXL"],
+            "splits": [20],
+            "principal": "20000",
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-08",
+            "count": 50,
+            "min_days": 2,
+            "max_days": 1,
+            "seed": 77,
+            "uniform_start_sampling": True,
+            "csv_dir": str(self.qld.parent),
+        })
+
+        self.assertEqual(result["result_type"], "lth_random_comparison")
+        self.assertEqual(result["config"]["requested_count"], 50)
+        self.assertEqual(result["config"]["count"], 5)
+        self.assertEqual(len(result["sample_rows"]), 5)
+        self.assertEqual({row["trading_days"] for row in result["sample_rows"]}, {2})
+        self.assertTrue(result["methodology"]["strict_common_dates"])
 
     def test_background_random_job_exposes_progress_and_result(self) -> None:
         payload = dict(self.payload, count=4, min_days=2, max_days=4, seed=19, initial_entry="moc")

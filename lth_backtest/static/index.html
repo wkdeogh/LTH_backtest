@@ -408,7 +408,7 @@
                 <span id="randomPreviousHighSetting">전고점 매매법 · 5% × 20분할</span>
                 <small>종목·분할 조합을 추가하지 않고 이 두 설정과 4개 거치식을 동일 랜덤 기간에서 비교합니다.</small>
               </div>
-              <label class="random-sampling-option hidden" id="uniformSamplingOption" data-analysis-modes="compare"><input type="checkbox" name="uniform_start_sampling" id="uniformStartSampling"><span><strong>균등 시작일 샘플링</strong><small>가능한 시작일 전체에 표본을 고르게 배치하고 모든 구간을 최소 거래일 길이로 고정합니다.</small></span></label>
+              <label class="random-sampling-option" id="uniformSamplingOption" data-analysis-modes="lth_v4 compare"><input type="checkbox" name="uniform_start_sampling" id="uniformStartSampling"><span><strong>균등 시작일 샘플링</strong><small>가능한 시작일 전체에 표본을 고르게 배치하고 모든 구간을 최소 거래일 길이로 고정합니다.</small></span></label>
               <div class="field-grid three"><label class="field"><span>샘플 수 <small>최대 5,000</small></span><input name="count" type="number" min="1" max="5000" value="100"></label><label class="field"><span>최소 거래일</span><input name="min_days" type="number" min="2" value="60"></label><label class="field"><span>최대 거래일</span><input name="max_days" type="number" min="2" placeholder="전체"></label></div>
               <label class="field"><span>재현 시드</span><input name="seed" type="number" placeholder="비우면 무작위"></label>
               <button class="button primary full" type="submit">랜덤 비교 실행</button>

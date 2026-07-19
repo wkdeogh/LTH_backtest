@@ -110,6 +110,7 @@ def command_random(args: argparse.Namespace) -> object:
         min_days=args.min_days,
         max_days=args.max_days,
         seed=args.seed,
+        uniform_start_sampling=args.uniform_start_sampling,
         csv_dir=Path(args.csv_dir) if args.csv_dir else None,
         compounding_type="simple" if args.simple else "compound",
         sell_percent=decimal(args.sell_percent) if args.sell_percent is not None else None,
@@ -284,6 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
     random_parser.add_argument("--min-days", type=int, default=60)
     random_parser.add_argument("--max-days", type=int)
     random_parser.add_argument("--seed", type=int)
+    random_parser.add_argument("--uniform-start-sampling", action="store_true", help="시작일을 균등 배치하고 모든 표본을 최소 거래일 길이로 고정")
     random_parser.add_argument("--csv-dir")
     random_parser.add_argument("--simple", action="store_true")
     random_parser.add_argument("--sell-percent", type=Decimal)
